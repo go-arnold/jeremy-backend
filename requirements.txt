@@ -1,0 +1,50 @@
+# Core
+Django==5.0.9
+djangorestframework==3.15.2
+
+# Authentication
+djangorestframework-simplejwt==5.3.1
+dj-rest-auth==6.0.0
+django-allauth==65.3.0
+
+# Database
+psycopg2-binary
+# django-db-connection-pool[postgresql]
+# django-db-connection-pool
+# psycopg2-binary
+# django-db-connection-pool
+# django-db-connection-pool[postgresql]
+# django-db-connection-pool-psycopg2==1.2.5
+
+# Cache & Async
+redis==5.2.1
+django-redis==5.4.0
+celery==5.4.0
+django-celery-beat==2.7.0
+
+# Storage
+cloudinary==1.41.0
+django-cloudinary-storage==0.3.0
+django-storages==1.14.4
+
+# API
+drf-spectacular==0.28.0
+django-cors-headers==4.6.0
+django-filter==24.3
+
+# Utils
+python-decouple==3.8
+Pillow==11.1.0
+django-extensions==3.2.3
+cryptography
+
+# Seed data
+Faker==33.3.1
+
+# Server
+gunicorn==23.0.0
+uvicorn[standard]==0.34.0
+
+# Dev
+pytest-django==4.9.0
+factory-boy==3.3.1

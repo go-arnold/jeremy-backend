@@ -1,0 +1,92 @@
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from rest_framework import permissions, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.viewsets import ModelViewSet
+
+from core.pagination import StandardPagination
+from core.permissions import IsAdminOrReadOnly
+
+from . import services
+from .filters import ArtistFilter
+from .models import Artist, Genre
+from .serializers import (
+    ArtistDetailSerializer,
+    ArtistListSerializer,
+    ArtistPhotoSerializer,
+    ArtistVideoSerializer,
+    ArtistWriteSerializer,
+    GenreSerializer,
+    ReleaseSerializer,
+)
+
+
+class ArtistViewSet(ModelViewSet):
+    permission_classes = [IsAdminOrReadOnly]
+    pagination_class = StandardPagination
+    filterset_class = ArtistFilter
+    search_fields = ["name", "city", "bio"]
+    ordering_fields = ["name", "created_at"]
+    lookup_field = "slug"
+
+    def get_queryset(self):
+        return (
+            Artist.objects.prefetch_related("genres")
+            .only("id", "name", "slug", "city", "photo", "is_featured", "created_at")
+            .order_by("name")
+        )
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return ArtistWriteSerializer
+        if self.action == "retrieve":
+            return ArtistDetailSerializer
+        return ArtistListSerializer
+
+    def retrieve(self, request, *args, **kwargs):
+        slug = kwargs.get("slug")
+        from django.core.cache import cache
+        cache_key = f"artists:detail:{slug}"
+        data = cache.get(cache_key)
+        if data is None:
+            instance = self.get_object()
+            qs = Artist.objects.prefetch_related(
+                "genres", "releases", "videos", "gallery"
+            ).get(slug=slug)
+            data = ArtistDetailSerializer(qs).data
+            cache.set(cache_key, data, 60 * 15)
+        return Response(data)
+
+    def perform_create(self, serializer):
+        genres = serializer.validated_data.pop("genres", [])
+        artist = services.create_artist(serializer.validated_data, genres)
+        serializer.instance = artist
+
+    def perform_update(self, serializer):
+        genres = serializer.validated_data.pop("genres", None)
+        services.update_artist(serializer.instance, serializer.validated_data, genres)
+
+    @method_decorator(cache_page(60 * 15))
+    @action(detail=False, methods=["get"])
+    def genres(self, request):
+        genres = Genre.objects.all()
+        return Response(GenreSerializer(genres, many=True).data)
+
+    @action(detail=True, methods=["get"])
+    def releases(self, request, slug=None):
+        artist = self.get_object()
+        qs = artist.releases.select_related("artist").order_by("-release_date")
+        return Response(ReleaseSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=["get"])
+    def videos(self, request, slug=None):
+        artist = self.get_object()
+        qs = artist.videos.order_by("order", "-published_at")
+        return Response(ArtistVideoSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=["get"])
+    def gallery(self, request, slug=None):
+        artist = self.get_object()
+        qs = artist.gallery.order_by("order")
+        return Response(ArtistPhotoSerializer(qs, many=True).data)
