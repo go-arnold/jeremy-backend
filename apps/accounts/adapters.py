@@ -1,17 +1,46 @@
+import logging
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django.conf import settings
 
+logger = logging.getLogger(__name__)
 
 class AccountAdapter(DefaultAccountAdapter):
     """
     Overrides allauth's default email URLs so that confirmation and password-reset
     links in outgoing emails point directly to the decoupled frontend, not to
     Django's HTML views.
+
+    All outgoing emails are dispatched asynchronously via Celery so that SMTP
+    latency never blocks the HTTP request cycle.
     """
+
+    def send_mail(self, template_prefix, email, context):
+        """Render templates synchronously, then hand the payload off to Celery."""
+        from .tasks import send_email_async
+
+        msg = self.render_mail(template_prefix, email, context)
+
+        html_body = None
+        for content, mimetype in getattr(msg, "alternatives", []):
+            if mimetype == "text/html":
+                html_body = content
+                break
+
+
+        logger.info(f"Sending email asynchronously to {msg.to}")
+        print(f"Sending email asynchronously to {msg.to}")
+        send_email_async.delay(
+            subject=msg.subject,
+            body=msg.body,
+            from_email=msg.from_email,
+            to=msg.to,
+            html_body=html_body,
+        )
 
     def get_email_confirmation_url(self, request, emailconfirmation):
         """Email confirmation link → frontend /verify-email?key=<key>."""
+        logger.info(f"Generating email confirmation URL for {emailconfirmation.key}")
         return f"{settings.FRONTEND_URL}/verify-email?key={emailconfirmation.key}"
 
     def send_password_reset_mail(self, user, email, extra_email_context):
@@ -19,6 +48,7 @@ class AccountAdapter(DefaultAccountAdapter):
         Inject a frontend password_reset_url into the template context so the
         email contains a link to the SPA instead of the backend /accounts/ URL.
         """
+        logger.info(f"Sending password reset email to {email}")
         from allauth.account.utils import user_pk_to_url_str
         from django.contrib.auth.tokens import default_token_generator
 
@@ -35,6 +65,7 @@ class AccountAdapter(DefaultAccountAdapter):
 
 class SocialAccountAdapter(DefaultSocialAccountAdapter):
     def is_open_for_signup(self, request, sociallogin):
+        logger.info(f"Checking if signup is open for social login: {sociallogin}")
         return True
 
     def populate_user(self, request, sociallogin, data):
@@ -43,4 +74,5 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
         if not getattr(user, "username", None):
             email = data.get("email", "")
             user.username = email.split("@")[0][:30] if email else ""
+        logger.info(f"Populated user: {user}")
         return user
