@@ -1,20 +1,26 @@
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from rest_framework import status
+from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
+from core.serializers import BulkDeleteSerializer
 
+from . import services
 from .models import PodcastEpisode, PodcastSeries
 from .serializers import (
+    EpisodeBulkCreateSerializer,
+    EpisodeBulkUpdateSerializer,
     EpisodeDetailSerializer,
     EpisodeListSerializer,
     EpisodeWriteSerializer,
     PodcastSeriesListSerializer,
     PodcastSeriesWriteSerializer,
+    SeriesBulkCreateSerializer,
+    SeriesBulkUpdateSerializer,
 )
 from .tasks import async_increment_play
 
@@ -41,6 +47,15 @@ class PodcastSeriesViewSet(ModelViewSet):
             return PodcastSeriesWriteSerializer
         return PodcastSeriesListSerializer
 
+    def perform_create(self, serializer):
+        serializer.instance = services.create_series(dict(serializer.validated_data))
+
+    def perform_update(self, serializer):
+        serializer.instance = services.update_series(serializer.instance, dict(serializer.validated_data))
+
+    def perform_destroy(self, instance):
+        services.delete_series(instance)
+
     @method_decorator(cache_page(60 * 15))
     @action(detail=False, methods=["get"])
     def categories(self, request):
@@ -53,6 +68,30 @@ class PodcastSeriesViewSet(ModelViewSet):
         qs = series.episodes.order_by("-published_at")
         page = self.paginate_queryset(qs)
         return self.get_paginated_response(EpisodeListSerializer(page, many=True).data)
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_create(self, request):
+        ser = SeriesBulkCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        created = services.bulk_create_series(ser.validated_data["items"])
+        return Response(
+            {"created": len(created), "items": PodcastSeriesListSerializer(created, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_update(self, request):
+        ser = SeriesBulkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_update_series(ser.validated_data["items"])
+        return Response({"updated": count})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_delete_series(ser.validated_data["ids"])
+        return Response({"deleted": count})
 
 
 class PodcastEpisodeViewSet(ModelViewSet):
@@ -81,8 +120,41 @@ class PodcastEpisodeViewSet(ModelViewSet):
             return EpisodeDetailSerializer
         return EpisodeListSerializer
 
+    def perform_create(self, serializer):
+        serializer.instance = services.create_episode(dict(serializer.validated_data))
+
+    def perform_update(self, serializer):
+        serializer.instance = services.update_episode(serializer.instance, dict(serializer.validated_data))
+
+    def perform_destroy(self, instance):
+        services.delete_episode(instance)
+
     @action(detail=True, methods=["post"])
     def play(self, request, slug=None):
         episode = self.get_object()
         async_increment_play.delay(episode.pk)
         return Response({"detail": "Play count updated."})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_create(self, request):
+        ser = EpisodeBulkCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        created = services.bulk_create_episodes(ser.validated_data["items"])
+        return Response(
+            {"created": len(created), "items": EpisodeListSerializer(created, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_update(self, request):
+        ser = EpisodeBulkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_update_episodes(ser.validated_data["items"])
+        return Response({"updated": count})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_delete_episodes(ser.validated_data["ids"])
+        return Response({"deleted": count})

@@ -1,14 +1,23 @@
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
+from core.serializers import BulkDeleteSerializer
 
+from . import services
 from .models import WebTVVideo
-from .serializers import VideoDetailSerializer, VideoListSerializer, VideoWriteSerializer
+from .serializers import (
+    VideoBulkCreateSerializer,
+    VideoBulkUpdateSerializer,
+    VideoDetailSerializer,
+    VideoListSerializer,
+    VideoWriteSerializer,
+)
 from .tasks import async_increment_view
 
 
@@ -33,6 +42,15 @@ class WebTVVideoViewSet(ModelViewSet):
             return VideoDetailSerializer
         return VideoListSerializer
 
+    def perform_create(self, serializer):
+        serializer.instance = services.create_video(dict(serializer.validated_data))
+
+    def perform_update(self, serializer):
+        serializer.instance = services.update_video(serializer.instance, dict(serializer.validated_data))
+
+    def perform_destroy(self, instance):
+        services.delete_video(instance)
+
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
         async_increment_view.delay(instance.pk)
@@ -49,3 +67,27 @@ class WebTVVideoViewSet(ModelViewSet):
         video = self.get_object()
         async_increment_view.delay(video.pk)
         return Response({"detail": "View counted."})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_create(self, request):
+        ser = VideoBulkCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        created = services.bulk_create_videos(ser.validated_data["items"])
+        return Response(
+            {"created": len(created), "items": VideoListSerializer(created, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_update(self, request):
+        ser = VideoBulkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_update_videos(ser.validated_data["items"])
+        return Response({"updated": count})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_delete_videos(ser.validated_data["ids"])
+        return Response({"deleted": count})

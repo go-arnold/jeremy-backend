@@ -60,3 +60,46 @@ class PollSerializer(serializers.ModelSerializer):
     class Meta:
         model = Poll
         fields = ["id", "question", "vote_count", "options", "expires_at", "is_active", "created_at"]
+
+
+class ChallengeWriteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Challenge
+        fields = ["title", "slug", "description", "cover", "prize", "deadline", "is_active"]
+        extra_kwargs = {"slug": {"required": False}}
+
+
+class ChallengeBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    title = serializers.CharField(max_length=200, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    prize = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    deadline = serializers.DateTimeField(required=False)
+    is_active = serializers.BooleanField(required=False)
+
+
+class ChallengeBulkCreateSerializer(serializers.Serializer):
+    items = ChallengeWriteSerializer(many=True, min_length=1, max_length=100)
+
+
+class ChallengeBulkUpdateSerializer(serializers.Serializer):
+    items = ChallengeBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)
+
+
+class _PollOptionInputSerializer(serializers.Serializer):
+    text = serializers.CharField(max_length=200)
+
+
+class PollWriteSerializer(serializers.ModelSerializer):
+    options = _PollOptionInputSerializer(many=True, write_only=True, required=False)
+
+    class Meta:
+        model = Poll
+        fields = ["question", "expires_at", "is_active", "options"]
+
+    def validate_options(self, value):
+        if len(value) < 2:
+            raise serializers.ValidationError("A poll must have at least 2 options.")
+        if len(value) > 20:
+            raise serializers.ValidationError("A poll cannot have more than 20 options.")
+        return value

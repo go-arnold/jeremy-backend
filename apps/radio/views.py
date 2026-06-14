@@ -2,15 +2,23 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from rest_framework import permissions, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from core.pagination import SmallPagination
 from core.permissions import IsAdminOrReadOnly, IsOwnerOrAdmin
+from core.serializers import BulkDeleteSerializer
 
+from . import services
 from .models import RadioChat, RadioProgram
-from .serializers import RadioChatSerializer, RadioProgramSerializer, RadioProgramWriteSerializer
+from .serializers import (
+    RadioChatSerializer,
+    RadioProgramBulkCreateSerializer,
+    RadioProgramBulkUpdateSerializer,
+    RadioProgramSerializer,
+    RadioProgramWriteSerializer,
+)
 
 
 class RadioProgramViewSet(ModelViewSet):
@@ -29,6 +37,39 @@ class RadioProgramViewSet(ModelViewSet):
         if day is not None:
             qs = qs.filter(day_of_week=day)
         return qs
+
+    def perform_create(self, serializer):
+        serializer.instance = services.create_program(dict(serializer.validated_data))
+
+    def perform_update(self, serializer):
+        serializer.instance = services.update_program(serializer.instance, dict(serializer.validated_data))
+
+    def perform_destroy(self, instance):
+        services.delete_program(instance)
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_create(self, request):
+        ser = RadioProgramBulkCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        created = services.bulk_create_programs(ser.validated_data["items"])
+        return Response(
+            {"created": len(created), "items": RadioProgramSerializer(created, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_update(self, request):
+        ser = RadioProgramBulkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_update_programs(ser.validated_data["items"])
+        return Response({"updated": count})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_delete_programs(ser.validated_data["ids"])
+        return Response({"deleted": count})
 
 
 class RadioChatViewSet(ModelViewSet):

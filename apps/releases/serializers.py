@@ -44,3 +44,23 @@ class ReleaseWriteSerializer(serializers.ModelSerializer):
             "is_featured", "is_premiere", "streaming_links", "description", "preview_url",
         ]
         extra_kwargs = {"slug": {"required": False}}
+
+
+class ReleaseBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    title = serializers.CharField(max_length=200, required=False)
+    release_date = serializers.DateField(required=False)
+    format = serializers.ChoiceField(choices=MusicRelease.FORMAT_CHOICES, required=False)
+    is_featured = serializers.BooleanField(required=False)
+    is_premiere = serializers.BooleanField(required=False)
+    streaming_links = serializers.JSONField(required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    preview_url = serializers.URLField(required=False, allow_blank=True)
+
+
+class ReleaseBulkCreateSerializer(serializers.Serializer):
+    items = ReleaseWriteSerializer(many=True, min_length=1, max_length=100)
+
+
+class ReleaseBulkUpdateSerializer(serializers.Serializer):
+    items = ReleaseBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)

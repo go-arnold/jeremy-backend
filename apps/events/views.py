@@ -7,10 +7,14 @@ from rest_framework.viewsets import ModelViewSet
 
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
+from core.serializers import BulkDeleteSerializer
 
-from .models import City, Event, EventRegistration
+from . import services
+from .models import City, Event
 from .serializers import (
     CitySerializer,
+    EventBulkCreateSerializer,
+    EventBulkUpdateSerializer,
     EventDetailSerializer,
     EventListSerializer,
     EventWriteSerializer,
@@ -54,6 +58,15 @@ class EventViewSet(ModelViewSet):
             return EventDetailSerializer
         return EventListSerializer
 
+    def perform_create(self, serializer):
+        serializer.instance = services.create_event(dict(serializer.validated_data))
+
+    def perform_update(self, serializer):
+        serializer.instance = services.update_event(serializer.instance, dict(serializer.validated_data))
+
+    def perform_destroy(self, instance):
+        services.delete_event(instance)
+
     @method_decorator(cache_page(60 * 30))
     @action(detail=False, methods=["get"])
     def featured(self, request):
@@ -70,10 +83,33 @@ class EventViewSet(ModelViewSet):
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def register(self, request, slug=None):
         event = self.get_object()
-        if event.max_capacity and event.current_registrations >= event.max_capacity:
+        result = services.register_for_event(event, request.user)
+        if result.get("error") == "full":
             return Response({"detail": "Event is full."}, status=status.HTTP_400_BAD_REQUEST)
-        reg, created = EventRegistration.objects.get_or_create(event=event, user=request.user)
-        if not created:
+        if result.get("error") == "already_registered":
             return Response({"detail": "Already registered."}, status=status.HTTP_400_BAD_REQUEST)
-        Event.objects.filter(pk=event.pk).update(current_registrations=event.current_registrations + 1)
         return Response({"detail": "Registered successfully."}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_create(self, request):
+        ser = EventBulkCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        created = services.bulk_create_events(ser.validated_data["items"])
+        return Response(
+            {"created": len(created), "items": EventListSerializer(created, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_update(self, request):
+        ser = EventBulkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_update_events(ser.validated_data["items"])
+        return Response({"updated": count})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_delete_events(ser.validated_data["ids"])
+        return Response({"deleted": count})

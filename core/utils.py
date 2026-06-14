@@ -29,6 +29,18 @@ def invalidate_resource_cache(resource: str) -> None:
     invalidate_cache_pattern(f":{resource}:")
 
 
+def gen_unique_slug(text: str, model_class, used_slugs: set, field: str = "slug") -> str:
+    """Generate a unique slug, checking both the DB and an in-batch used_slugs set."""
+    base = slugify(text)
+    slug = base
+    counter = 1
+    while model_class.objects.filter(**{field: slug}).exists() or slug in used_slugs:
+        slug = f"{base}-{counter}"
+        counter += 1
+    used_slugs.add(slug)
+    return slug
+
+
 def read_time_minutes(text: str) -> int:
     """Estimate reading time in minutes (200 words/min)."""
     word_count = len(re.findall(r"\w+", text))

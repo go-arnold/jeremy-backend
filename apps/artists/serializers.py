@@ -99,3 +99,21 @@ class ArtistWriteSerializer(serializers.ModelSerializer):
             "photo", "cover_image", "genres", "is_featured", "social_links",
         ]
         extra_kwargs = {"slug": {"required": False}}
+
+
+class ArtistBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    name = serializers.CharField(max_length=200, required=False)
+    bio = serializers.CharField(required=False, allow_blank=True)
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    country = serializers.CharField(max_length=100, required=False)
+    is_featured = serializers.BooleanField(required=False)
+    social_links = serializers.JSONField(required=False)
+
+
+class ArtistBulkCreateSerializer(serializers.Serializer):
+    items = ArtistWriteSerializer(many=True, min_length=1, max_length=100)
+
+
+class ArtistBulkUpdateSerializer(serializers.Serializer):
+    items = ArtistBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)

@@ -76,3 +76,32 @@ class EventWriteSerializer(serializers.ModelSerializer):
             "is_featured", "ticket_price", "ticket_link", "max_capacity", "artists",
         ]
         extra_kwargs = {"slug": {"required": False}}
+
+
+class EventBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    title = serializers.CharField(max_length=300, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    date = serializers.DateTimeField(required=False)
+    end_date = serializers.DateTimeField(required=False, allow_null=True)
+    venue_name = serializers.CharField(max_length=200, required=False)
+    venue_address = serializers.CharField(max_length=300, required=False, allow_blank=True)
+    city = serializers.PrimaryKeyRelatedField(
+        queryset=City.objects.all(), required=False, allow_null=True
+    )
+    category = serializers.ChoiceField(choices=Event.CATEGORY_CHOICES, required=False)
+    status = serializers.ChoiceField(choices=Event.STATUS_CHOICES, required=False)
+    is_featured = serializers.BooleanField(required=False)
+    ticket_price = serializers.DecimalField(
+        max_digits=10, decimal_places=2, required=False, allow_null=True
+    )
+    ticket_link = serializers.URLField(required=False, allow_blank=True)
+    max_capacity = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+
+
+class EventBulkCreateSerializer(serializers.Serializer):
+    items = EventWriteSerializer(many=True, min_length=1, max_length=100)
+
+
+class EventBulkUpdateSerializer(serializers.Serializer):
+    items = EventBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)

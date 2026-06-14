@@ -1,4 +1,3 @@
-from django.db import transaction
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -6,13 +5,18 @@ from rest_framework.viewsets import ModelViewSet
 
 from core.pagination import StandardPagination
 from core.permissions import IsOwnerOrAdmin
+from core.serializers import BulkDeleteSerializer
 
-from .models import Challenge, CommunityPost, Poll, PollOption, PollVote, PostLike
+from . import services
+from .models import Challenge, CommunityPost, Poll
 from .serializers import (
+    ChallengeBulkCreateSerializer,
+    ChallengeBulkUpdateSerializer,
     ChallengeSerializer,
     CommunityPostSerializer,
     CommunityPostWriteSerializer,
     PollSerializer,
+    PollWriteSerializer,
 )
 
 
@@ -40,18 +44,24 @@ class CommunityPostViewSet(ModelViewSet):
         return CommunityPostSerializer
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        serializer.instance = services.create_post(dict(serializer.validated_data), self.request.user)
+
+    def perform_destroy(self, instance):
+        services.delete_post(instance)
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def like(self, request, pk=None):
         post = self.get_object()
-        like, created = PostLike.objects.get_or_create(post=post, user=request.user)
-        if not created:
-            like.delete()
-            CommunityPost.objects.filter(pk=post.pk).update(like_count=post.likes.count())
-            return Response({"action": "unliked"})
-        CommunityPost.objects.filter(pk=post.pk).update(like_count=post.likes.count())
-        return Response({"action": "liked"}, status=status.HTTP_201_CREATED)
+        result = services.toggle_post_like(post, request.user)
+        code = status.HTTP_201_CREATED if result["action"] == "liked" else status.HTTP_200_OK
+        return Response(result, status=code)
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_delete_posts(ser.validated_data["ids"])
+        return Response({"deleted": count})
 
 
 class ChallengeViewSet(ModelViewSet):
@@ -69,6 +79,39 @@ class ChallengeViewSet(ModelViewSet):
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
 
+    def perform_create(self, serializer):
+        serializer.instance = services.create_challenge(dict(serializer.validated_data))
+
+    def perform_update(self, serializer):
+        serializer.instance = services.update_challenge(serializer.instance, dict(serializer.validated_data))
+
+    def perform_destroy(self, instance):
+        services.delete_challenge(instance)
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_create(self, request):
+        ser = ChallengeBulkCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        created = services.bulk_create_challenges(ser.validated_data["items"])
+        return Response(
+            {"created": len(created), "items": ChallengeSerializer(created, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_update(self, request):
+        ser = ChallengeBulkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_update_challenges(ser.validated_data["items"])
+        return Response({"updated": count})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_delete_challenges(ser.validated_data["ids"])
+        return Response({"deleted": count})
+
 
 class PollViewSet(ModelViewSet):
     pagination_class = StandardPagination
@@ -77,6 +120,8 @@ class PollViewSet(ModelViewSet):
         return Poll.objects.filter(is_active=True).prefetch_related("options")
 
     def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return PollWriteSerializer
         return PollSerializer
 
     def get_permissions(self):
@@ -84,21 +129,44 @@ class PollViewSet(ModelViewSet):
             return [permissions.IsAdminUser()]
         return [permissions.AllowAny()]
 
-    @transaction.atomic
+    def perform_create(self, serializer):
+        poll = services.create_poll(dict(serializer.validated_data))
+        # Return full read representation after create
+        serializer.instance = poll
+
+    def perform_update(self, serializer):
+        serializer.instance = services.update_poll(serializer.instance, dict(serializer.validated_data))
+
+    def perform_destroy(self, instance):
+        services.delete_poll(instance)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        # Respond with the read serializer so the caller gets options back
+        return Response(
+            PollSerializer(serializer.instance).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_delete_polls(ser.validated_data["ids"])
+        return Response({"deleted": count})
+
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def vote(self, request, pk=None):
         poll = self.get_object()
         option_id = request.data.get("option_id")
         if not option_id:
             return Response({"detail": "option_id required"}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            option = PollOption.objects.get(pk=option_id, poll=poll)
-        except PollOption.DoesNotExist:
-            return Response({"detail": "Invalid option"}, status=status.HTTP_400_BAD_REQUEST)
-        if PollVote.objects.filter(poll=poll, user=request.user).exists():
-            return Response({"detail": "Already voted"}, status=status.HTTP_400_BAD_REQUEST)
-        PollVote.objects.create(poll=poll, user=request.user, option=option)
-        PollOption.objects.filter(pk=option.pk).update(vote_count=option.vote_count + 1)
-        Poll.objects.filter(pk=poll.pk).update(vote_count=poll.vote_count + 1)
+        result = services.vote_poll(poll, request.user, option_id)
+        if result.get("error") == "invalid_option":
+            return Response({"detail": "Invalid option."}, status=status.HTTP_400_BAD_REQUEST)
+        if result.get("error") == "already_voted":
+            return Response({"detail": "Already voted."}, status=status.HTTP_400_BAD_REQUEST)
         poll.refresh_from_db()
         return Response(PollSerializer(poll).data)

@@ -71,3 +71,39 @@ class PodcastSeriesWriteSerializer(serializers.ModelSerializer):
         model = PodcastSeries
         fields = ["title", "slug", "description", "cover", "category", "is_featured"]
         extra_kwargs = {"slug": {"required": False}}
+
+
+class SeriesBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    title = serializers.CharField(max_length=200, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    category = serializers.ChoiceField(choices=PodcastSeries.CATEGORY_CHOICES, required=False)
+    is_featured = serializers.BooleanField(required=False)
+
+
+class SeriesBulkCreateSerializer(serializers.Serializer):
+    items = PodcastSeriesWriteSerializer(many=True, min_length=1, max_length=100)
+
+
+class SeriesBulkUpdateSerializer(serializers.Serializer):
+    items = SeriesBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)
+
+
+class EpisodeBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    title = serializers.CharField(max_length=300, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    duration = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    episode_number = serializers.IntegerField(min_value=1, required=False)
+    season_number = serializers.IntegerField(min_value=1, required=False)
+    guests = serializers.JSONField(required=False)
+    is_featured = serializers.BooleanField(required=False)
+    published_at = serializers.DateTimeField(required=False)
+
+
+class EpisodeBulkCreateSerializer(serializers.Serializer):
+    items = EpisodeWriteSerializer(many=True, min_length=1, max_length=100)
+
+
+class EpisodeBulkUpdateSerializer(serializers.Serializer):
+    items = EpisodeBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)

@@ -46,3 +46,24 @@ class VideoWriteSerializer(serializers.ModelSerializer):
             "artists", "published_at",
         ]
         extra_kwargs = {"slug": {"required": False}}
+
+
+class VideoBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    title = serializers.CharField(max_length=300, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    video_url = serializers.URLField(required=False)
+    duration = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    category = serializers.ChoiceField(choices=WebTVVideo.CATEGORY_CHOICES, required=False)
+    is_premier = serializers.BooleanField(required=False)
+    is_live = serializers.BooleanField(required=False)
+    location = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    published_at = serializers.DateTimeField(required=False)
+
+
+class VideoBulkCreateSerializer(serializers.Serializer):
+    items = VideoWriteSerializer(many=True, min_length=1, max_length=100)
+
+
+class VideoBulkUpdateSerializer(serializers.Serializer):
+    items = VideoBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)

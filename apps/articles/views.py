@@ -7,10 +7,13 @@ from rest_framework.viewsets import ModelViewSet
 
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly, IsOwnerOrAdmin
+from core.serializers import BulkDeleteSerializer
 
 from . import services
 from .models import Article, Category, Comment
 from .serializers import (
+    ArticleBulkCreateSerializer,
+    ArticleBulkUpdateSerializer,
     ArticleDetailSerializer,
     ArticleListSerializer,
     ArticleWriteSerializer,
@@ -65,7 +68,13 @@ class ArticleViewSet(ModelViewSet):
         return Response(serializer.data)
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        serializer.instance = services.create_article(dict(serializer.validated_data), self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.instance = services.update_article(serializer.instance, dict(serializer.validated_data))
+
+    def perform_destroy(self, instance):
+        services.delete_article(instance)
 
     @method_decorator(cache_page(60 * 60))
     @action(detail=False, methods=["get"])
@@ -94,3 +103,27 @@ class ArticleViewSet(ModelViewSet):
             request.data.get("parent_id"),
         )
         return Response(CommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_create(self, request):
+        ser = ArticleBulkCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        created = services.bulk_create_articles(ser.validated_data["items"], request.user)
+        return Response(
+            {"created": len(created), "items": ArticleListSerializer(created, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_update(self, request):
+        ser = ArticleBulkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_update_articles(ser.validated_data["items"])
+        return Response({"updated": count})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_delete_articles(ser.validated_data["ids"])
+        return Response({"deleted": count})

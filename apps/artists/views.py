@@ -7,11 +7,14 @@ from rest_framework.viewsets import ModelViewSet
 
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
+from core.serializers import BulkDeleteSerializer
 
 from . import services
 from .filters import ArtistFilter
 from .models import Artist, Genre
 from .serializers import (
+    ArtistBulkCreateSerializer,
+    ArtistBulkUpdateSerializer,
     ArtistDetailSerializer,
     ArtistListSerializer,
     ArtistPhotoSerializer,
@@ -90,3 +93,27 @@ class ArtistViewSet(ModelViewSet):
         artist = self.get_object()
         qs = artist.gallery.order_by("order")
         return Response(ArtistPhotoSerializer(qs, many=True).data)
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_create(self, request):
+        ser = ArtistBulkCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        created = services.bulk_create_artists(ser.validated_data["items"])
+        return Response(
+            {"created": len(created), "items": ArtistListSerializer(created, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_update(self, request):
+        ser = ArtistBulkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_update_artists(ser.validated_data["items"])
+        return Response({"updated": count})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_delete_artists(ser.validated_data["ids"])
+        return Response({"deleted": count})

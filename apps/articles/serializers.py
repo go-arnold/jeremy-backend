@@ -90,3 +90,28 @@ class ArticleWriteSerializer(serializers.ModelSerializer):
         if not value.strip():
             raise serializers.ValidationError("Content cannot be empty.")
         return value
+
+
+class ArticleBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    title = serializers.CharField(max_length=300, required=False)
+    excerpt = serializers.CharField(required=False, allow_blank=True)
+    content = serializers.CharField(required=False)
+    category = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(), required=False, allow_null=True
+    )
+    article_type = serializers.ChoiceField(
+        choices=Article.TYPE_CHOICES, required=False
+    )
+    status = serializers.ChoiceField(choices=Article.STATUS_CHOICES, required=False)
+    is_featured = serializers.BooleanField(required=False)
+    read_time = serializers.IntegerField(min_value=1, required=False)
+    scheduled_at = serializers.DateTimeField(required=False, allow_null=True)
+
+
+class ArticleBulkCreateSerializer(serializers.Serializer):
+    items = ArticleWriteSerializer(many=True, min_length=1, max_length=100)
+
+
+class ArticleBulkUpdateSerializer(serializers.Serializer):
+    items = ArticleBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)

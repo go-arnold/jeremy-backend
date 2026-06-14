@@ -29,6 +29,26 @@ class RadioProgramWriteSerializer(serializers.ModelSerializer):
         extra_kwargs = {"slug": {"required": False}}
 
 
+class RadioProgramBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    title = serializers.CharField(max_length=200, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    start_time = serializers.TimeField(required=False)
+    end_time = serializers.TimeField(required=False)
+    day_of_week = serializers.IntegerField(min_value=0, max_value=6, required=False)
+    presenter = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    status = serializers.ChoiceField(choices=RadioProgram.STATUS_CHOICES, required=False)
+    stream_url = serializers.URLField(required=False, allow_blank=True)
+
+
+class RadioProgramBulkCreateSerializer(serializers.Serializer):
+    items = RadioProgramWriteSerializer(many=True, min_length=1, max_length=100)
+
+
+class RadioProgramBulkUpdateSerializer(serializers.Serializer):
+    items = RadioProgramBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)
+
+
 class RadioChatSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     avatar_url = serializers.SerializerMethodField()
