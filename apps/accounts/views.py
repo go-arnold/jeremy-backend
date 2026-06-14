@@ -1,14 +1,14 @@
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from dj_rest_auth.registration.views import SocialLoginView
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
-from rest_framework import generics, permissions, mixins, status
+from django.conf import settings
+from django.shortcuts import redirect
+from django.views import View
+from rest_framework import generics, mixins, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from core.permissions import IsSelfOrAdmin
-from core.throttling import AuthRateThrottle
 
 from . import services
 from .models import ListenHistory, User
@@ -21,25 +21,25 @@ from .serializers import (
 
 
 class GoogleLoginView(SocialLoginView):
+    """
+    POST /api/v1/auth/google/
+    Body: {"access_token": "<google_access_token>"}
+    Returns JWT access + refresh tokens on success.
+    """
     adapter_class = GoogleOAuth2Adapter
 
 
-from core.permissions import IsSelfOrAdmin
-from core.throttling import AuthRateThrottle
-
-from . import services
-from .models import ListenHistory, User
-from .serializers import (
-    ListenHistorySerializer,
-    UserAdminSerializer,
-    UserPublicSerializer,
-    UserSerializer,
-)
+class EmailConfirmRedirectView(View):
+    """
+    Safety-net: /accounts/confirm-email/<key>/
+    The AccountAdapter already puts the frontend URL directly in emails, but if
+    a browser ever lands on this backend URL we redirect it cleanly to the SPA.
+    """
+    def get(self, request, key):
+        return redirect(f"{settings.FRONTEND_URL}/verify-email?key={key}")
 
 
 class MeView(generics.RetrieveUpdateAPIView):
-    """Dedicated view for /auth/me/ that always operates on request.user."""
-
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = UserSerializer
 
@@ -57,16 +57,8 @@ class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMix
 
     def get_queryset(self):
         qs = User.objects.only(
-            "id",
-            "email",
-            "username",
-            "handle",
-            "bio",
-            "role",
-            "is_active",
-            "is_verified",
-            "listen_count",
-            "created_at",
+            "id", "email", "username", "handle", "bio", "role",
+            "is_active", "is_verified", "listen_count", "created_at",
         )
         if not self.request.user.is_staff:
             qs = qs.filter(pk=self.request.user.pk)
@@ -95,25 +87,17 @@ class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMix
     def favorites(self, request, id=None):
         user = self.get_object()
         if request.method == "GET":
-            artists = services.get_user_favorites(user)
             from apps.artists.serializers import ArtistListSerializer
-
-            return Response(ArtistListSerializer(artists, many=True).data)
+            return Response(ArtistListSerializer(services.get_user_favorites(user), many=True).data)
         artist_id = request.data.get("artist_id")
         if not artist_id:
-            return Response(
-                {"detail": "artist_id required"}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "artist_id required"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             from apps.artists.models import Artist
-
             artist = Artist.objects.get(pk=artist_id)
         except Artist.DoesNotExist:
-            return Response(
-                {"detail": "Artist not found"}, status=status.HTTP_404_NOT_FOUND
-            )
-        result = services.toggle_favorite_artist(user, artist)
-        return Response(result)
+            return Response({"detail": "Artist not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(services.toggle_favorite_artist(user, artist))
 
     @action(detail=True, methods=["get"], url_path="history")
     def history(self, request, id=None):

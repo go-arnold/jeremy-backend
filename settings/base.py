@@ -149,9 +149,9 @@ CLOUDINARY_STORAGE = {
 }
 
 cloudinary.config(
-    cloud_name=CLOUDINARY_STORAGE["CLOUD_NAME"],
-    api_key=CLOUDINARY_STORAGE["API_KEY"],
-    api_secret=CLOUDINARY_STORAGE["API_SECRET"],
+    cloud_name=config("CLOUDINARY_CLOUD_NAME"),
+    api_key=config("CLOUDINARY_API_KEY"),
+    api_secret=config("CLOUDINARY_API_SECRET"),
 )
 
 DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
@@ -255,21 +255,35 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
+# ── Frontend ──────────────────────────────────────────────────────────────────
+FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
+
 # ── dj-rest-auth / allauth ────────────────────────────────────────────────────
 REST_AUTH = {
     "USE_JWT": True,
     "JWT_AUTH_COOKIE": None,
+    "JWT_AUTH_REFRESH_COOKIE": None,
+    "JWT_AUTH_HTTPONLY": False,
     "REGISTER_SERIALIZER": "apps.accounts.serializers.RegisterSerializer",
     "USER_DETAILS_SERIALIZER": "apps.accounts.serializers.UserSerializer",
 }
 
-# ACCOUNT_AUTHENTICATION_METHOD = "email"
 ACCOUNT_LOGIN_METHODS = {"email"}
-# ACCOUNT_EMAIL_REQUIRED = True
-# ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
-ACCOUNT_EMAIL_VERIFICATION = "optional"
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = "http"
+
+# Custom adapters redirect email/password-reset links to the frontend
+ACCOUNT_ADAPTER = "apps.accounts.adapters.AccountAdapter"
+SOCIALACCOUNT_ADAPTER = "apps.accounts.adapters.SocialAccountAdapter"
+
+# Google already verifies emails; skip redundant allauth verification for social logins
+SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
+SOCIALACCOUNT_QUERY_EMAIL = True
+SOCIALACCOUNT_EMAIL_REQUIRED = True
 
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
@@ -280,8 +294,11 @@ SOCIALACCOUNT_PROVIDERS = {
         },
         "SCOPE": ["profile", "email"],
         "AUTH_PARAMS": {"access_type": "online"},
+        "VERIFIED_EMAIL": True,
     }
 }
+
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@artdukivu.com")
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 CORS_ALLOWED_ORIGINS = config(

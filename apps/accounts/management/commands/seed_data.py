@@ -1,6 +1,9 @@
 """
 Management command to seed the database with large, realistic mock data.
-Run: python manage.py seed_data [--reset]
+Run: python manage.py seed_data [--reset] [--no-images]
+
+Images are fetched from picsum.photos and uploaded to Cloudinary on first run.
+Subsequent runs reuse the same public IDs (no re-upload). Use --no-images to skip.
 """
 import random
 from datetime import timedelta
@@ -45,12 +48,23 @@ ARTICLE_CATEGORIES = [
     ("Danse", "navy"), ("Sport", "yellow"),
 ]
 
+# Picsum seed → (width, height) per image category.
+# Fixed seeds so re-runs always reference the same Cloudinary public IDs.
+_IMG_SPECS = {
+    "portrait":  [(800, 800, i)       for i in range(200)],  # artist photos, avatars
+    "banner":    [(1200, 630, i + 20) for i in range(150)],  # articles, events, emissions
+    "square":    [(500, 500, i + 50)  for i in range(150)],  # album/podcast/radio covers
+    "thumbnail": [(1280, 720, i + 80) for i in range(150)],  # video thumbnails
+}
+
 
 class Command(BaseCommand):
     help = "Seed the database with large realistic mock data."
 
     def add_arguments(self, parser):
         parser.add_argument("--reset", action="store_true", help="Clear existing data first")
+        parser.add_argument("--no-images", action="store_true",
+                            help="Skip Cloudinary image upload (all image fields will be null)")
         parser.add_argument("--users", type=int, default=100)
         parser.add_argument("--artists", type=int, default=80)
         parser.add_argument("--articles", type=int, default=200)
@@ -63,22 +77,82 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["reset"]:
             self._clear_data()
+        images = {} if options["no_images"] else self._upload_placeholder_images()
         with transaction.atomic():
-            users = self._seed_users(options["users"])
+            users = self._seed_users(options["users"], images)
             genres = self._seed_genres()
-            artists = self._seed_artists(options["artists"], genres)
+            artists = self._seed_artists(options["artists"], genres, images)
             self._seed_favorite_artists(users, artists)
-            self._seed_releases(options["releases"], artists)
+            self._seed_releases(options["releases"], artists, images)
             categories = self._seed_article_categories()
-            self._seed_articles(options["articles"], users, categories)
+            self._seed_articles(options["articles"], users, categories, images)
             cities = self._seed_cities()
-            self._seed_events(options["events"], cities, artists)
-            self._seed_radio_programs()
-            self._seed_podcast_series_and_episodes(options["podcasts"], options["episodes"])
-            self._seed_webtv_videos(options["videos"], artists)
-            self._seed_emissions(30, artists)
-            self._seed_community()
+            self._seed_events(options["events"], cities, artists, images)
+            self._seed_radio_programs(images)
+            self._seed_podcast_series_and_episodes(options["podcasts"], options["episodes"], images)
+            self._seed_webtv_videos(options["videos"], artists, images)
+            self._seed_emissions(30, artists, images)
+            self._seed_community(images)
         self.stdout.write(self.style.SUCCESS("Seed data created successfully."))
+
+    # ── Image helpers ────────────────────────────────────────────────────────
+
+    def _ri(self, pool: dict, category: str):
+        """Return a random public_id from the pool for the given category, or None."""
+        imgs = pool.get(category, [])
+        return random.choice(imgs) if imgs else None
+
+    def _upload_placeholder_images(self) -> dict:
+        """
+        Upload one pool of placeholder images per category to Cloudinary.
+        Uses fixed public IDs so re-runs detect existing assets and skip the upload.
+        Returns {category: [public_id, ...]} — empty dict if Cloudinary is unreachable.
+        """
+        try:
+            import cloudinary.api
+            import cloudinary.uploader
+        except ImportError:
+            self.stdout.write(self.style.WARNING("cloudinary package not found — images will be null"))
+            return {}
+
+        try:
+            cloudinary.api.ping()
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f"Cloudinary unreachable ({e}) — images will be null"))
+            return {}
+
+        total = sum(len(v) for v in _IMG_SPECS.values())
+        self.stdout.write(f"Preparing {total} seed images on Cloudinary...")
+        pool: dict = {}
+        uploaded = reused = 0
+
+        for category, items in _IMG_SPECS.items():
+            ids: list = []
+            for w, h, seed in items:
+                pid = f"artdukivu/seed/{category}/{seed}"
+                # Check if already uploaded to avoid redundant API calls on re-runs.
+                try:
+                    cloudinary.api.resource(pid)
+                    ids.append(pid)
+                    reused += 1
+                    continue
+                except Exception:
+                    pass  # Not found (404) or transient error — proceed to upload.
+                try:
+                    url = f"https://picsum.photos/seed/adk{seed}/{w}/{h}"
+                    r = cloudinary.uploader.upload(url, public_id=pid, resource_type="image")
+                    ids.append(r["public_id"])
+                    uploaded += 1
+                except Exception as e:
+                    self.stdout.write(self.style.WARNING(f"  Skipped {pid}: {e}"))
+            pool[category] = ids
+
+        self.stdout.write(self.style.SUCCESS(
+            f"Image pool ready: {uploaded} uploaded, {reused} reused."
+        ))
+        return pool
+
+    # ── Data seeders ─────────────────────────────────────────────────────────
 
     def _clear_data(self):
         from apps.artists.models import Artist, Genre, Release, ArtistVideo, ArtistPhoto
@@ -101,19 +175,17 @@ class Command(BaseCommand):
             model.objects.all().delete()
         self.stdout.write("Cleared existing data.")
 
-    def _seed_users(self, count: int):
+    def _seed_users(self, count: int, images: dict):
         existing = User.objects.count()
         if existing > 5:
             return list(User.objects.all())
         users = []
-        # Admin user
         if not User.objects.filter(email="admin@artdukivu.com").exists():
             admin = User.objects.create_superuser(
                 email="admin@artdukivu.com", username="admin",
                 password="AdminPass123!", role=User.ROLE_ADMIN,
             )
             users.append(admin)
-        # Regular users
         roles = [User.ROLE_EDITOR, User.ROLE_MODERATOR, User.ROLE_VIEWER]
         batch = []
         for i in range(count):
@@ -127,6 +199,8 @@ class Command(BaseCommand):
                 is_verified=random.random() > 0.3,
                 first_name=fake.first_name(),
                 last_name=fake.last_name(),
+                avatar=self._ri(images, "portrait"),
+                cover_image=self._ri(images, "banner"),
             ))
         User.objects.bulk_create(batch, ignore_conflicts=True)
         users.extend(list(User.objects.all()))
@@ -137,12 +211,15 @@ class Command(BaseCommand):
         from apps.artists.models import Genre
         genre_objs = []
         for name in GENRES_DATA:
-            g, _ = Genre.objects.get_or_create(name=name, defaults={"slug": name.lower().replace(" ", "-").replace("&", "")})
+            g, _ = Genre.objects.get_or_create(
+                name=name,
+                defaults={"slug": name.lower().replace(" ", "-").replace("&", "")},
+            )
             genre_objs.append(g)
         return genre_objs
 
-    def _seed_artists(self, count: int, genres):
-        from apps.artists.models import Artist, Release
+    def _seed_artists(self, count: int, genres, images: dict):
+        from apps.artists.models import Artist
         artists = []
         all_names = list(CONGOLESE_ARTISTS) + [
             (fake.name(), random.choice(EVENT_CITIES), random.choice(GENRES_DATA))
@@ -150,7 +227,6 @@ class Command(BaseCommand):
         ]
         genre_map = {g.name: g for g in genres}
         for i, (name, city, genre_name) in enumerate(all_names[:count]):
-            # slug = f"{name.lower().replace(' ', '-').replace(\"'\", '')}-{i}" if i > 0 else name.lower().replace(' ', '-').replace("'", '')
             slug = f"{name.lower().replace(' ', '-').replace("'", '')}-{i}" if i > 0 else name.lower().replace(' ', '-').replace("'", '')
             a, created = Artist.objects.get_or_create(
                 slug=slug[:200],
@@ -158,6 +234,8 @@ class Command(BaseCommand):
                     "name": name, "city": city,
                     "bio": fake.paragraph(nb_sentences=5),
                     "is_featured": i < 10,
+                    "photo": self._ri(images, "portrait"),
+                    "cover_image": self._ri(images, "banner"),
                     "social_links": {
                         "instagram": f"https://instagram.com/{slug}",
                         "youtube": f"https://youtube.com/@{slug}",
@@ -178,7 +256,7 @@ class Command(BaseCommand):
             favs = random.sample(sample_artists, min(random.randint(1, 6), len(sample_artists)))
             user.favorite_artists.set(favs)
 
-    def _seed_releases(self, count: int, artists):
+    def _seed_releases(self, count: int, artists, images: dict):
         from apps.releases.models import MusicRelease
         formats = ["album", "single", "clip", "documentaire", "expo"]
         batch = []
@@ -191,6 +269,7 @@ class Command(BaseCommand):
                 artist=artist, title=title[:200], slug=slug,
                 release_date=rel_date,
                 format=random.choice(formats),
+                cover=self._ri(images, "square"),
                 is_featured=(i == 0),
                 is_premiere=random.random() > 0.8,
                 description=fake.paragraph(nb_sentences=3),
@@ -214,13 +293,16 @@ class Command(BaseCommand):
             Tag.objects.get_or_create(name=tag_name)
         return cats
 
-    def _seed_articles(self, count: int, users, categories):
+    def _seed_articles(self, count: int, users, categories, images: dict):
         from apps.articles.models import Article, Tag
         tags = list(Tag.objects.all())
         staff_users = [u for u in users if u.is_staff or u.role in ("admin", "editor")] or users[:5]
         batch = []
         for i in range(count):
-            pub_date = fake.date_time_between(start_date="-2y", end_date="now", tzinfo=timezone.get_current_timezone())
+            pub_date = fake.date_time_between(
+                start_date="-2y", end_date="now",
+                tzinfo=timezone.get_current_timezone(),
+            )
             title = fake.sentence(nb_words=8).rstrip(".")[:299]
             slug = f"article-{i}-{fake.slug()}"[:319]
             batch.append(Article(
@@ -229,6 +311,7 @@ class Command(BaseCommand):
                 content="\n\n".join([fake.paragraph(nb_sentences=6) for _ in range(5)]),
                 author=random.choice(staff_users) if staff_users else None,
                 category=random.choice(categories),
+                featured_image=self._ri(images, "banner"),
                 article_type=random.choice(["blog", "magazine"]),
                 status="published",
                 is_featured=(i < 5),
@@ -238,7 +321,6 @@ class Command(BaseCommand):
                 published_at=pub_date,
             ))
         Article.objects.bulk_create(batch, ignore_conflicts=True)
-        # Add tags
         articles = list(Article.objects.all())
         for article in random.sample(articles, min(count // 2, len(articles))):
             article.tags.set(random.sample(tags, min(3, len(tags))))
@@ -252,13 +334,16 @@ class Command(BaseCommand):
             cities.append(c)
         return cities
 
-    def _seed_events(self, count: int, cities, artists):
+    def _seed_events(self, count: int, cities, artists, images: dict):
         from apps.events.models import Event
         categories = ["concert", "festival", "exposition", "conference", "spectacle"]
         statuses = ["upcoming", "upcoming", "upcoming", "past", "live"]
         batch = []
         for i in range(count):
-            event_date = fake.date_time_between(start_date="-6m", end_date="+6m", tzinfo=timezone.get_current_timezone())
+            event_date = fake.date_time_between(
+                start_date="-6m", end_date="+6m",
+                tzinfo=timezone.get_current_timezone(),
+            )
             title = f"{fake.catch_phrase()} {random.choice(['Festival', 'Concert', 'Show', 'Expo'])}"[:299]
             slug = f"event-{i}-{fake.slug()}"[:319]
             batch.append(Event(
@@ -270,6 +355,7 @@ class Command(BaseCommand):
                 venue_address=fake.address()[:299],
                 city=random.choice(cities),
                 category=random.choice(categories),
+                image=self._ri(images, "banner"),
                 status=random.choice(statuses),
                 is_featured=(i < 3),
                 ticket_price=random.choice([None, 5000, 10000, 15000, 20000]),
@@ -282,27 +368,27 @@ class Command(BaseCommand):
             event.artists.set(random.sample(artists, min(random.randint(1, 4), len(artists))))
         self.stdout.write(f"Created {count} events")
 
-    def _seed_radio_programs(self):
+    def _seed_radio_programs(self, images: dict):
         from apps.radio.models import RadioProgram
         batch = []
         for day in range(7):
             times = [(8, 10), (10, 12), (12, 14), (14, 16), (18, 20), (20, 22)]
-            for idx, (start_h, end_h) in enumerate(times):
-                name = random.choice(RADIO_PROGRAMS)
+            for start_h, end_h in times:
                 slug = f"radio-{day}-{start_h}-{fake.slug()}"[:219]
                 batch.append(RadioProgram(
-                    title=name, slug=slug,
+                    title=random.choice(RADIO_PROGRAMS), slug=slug,
                     description=fake.sentence(nb_words=12),
                     start_time=f"{start_h:02d}:00",
                     end_time=f"{end_h:02d}:00",
                     day_of_week=day,
                     presenter=fake.name(),
+                    cover=self._ri(images, "square"),
                     status="upcoming",
                 ))
         RadioProgram.objects.bulk_create(batch, ignore_conflicts=True)
         self.stdout.write(f"Created {len(batch)} radio programs")
 
-    def _seed_podcast_series_and_episodes(self, series_count: int, episode_count: int):
+    def _seed_podcast_series_and_episodes(self, series_count: int, episode_count: int, images: dict):
         from apps.podcasts.models import PodcastSeries, PodcastEpisode
         series_list = []
         for i, (title, category) in enumerate(PODCAST_SERIES[:series_count]):
@@ -311,6 +397,7 @@ class Command(BaseCommand):
                 defaults={
                     "description": fake.paragraph(nb_sentences=3),
                     "category": category,
+                    "cover": self._ri(images, "square"),
                     "is_featured": i < 3,
                     "episode_count": 0,
                 }
@@ -323,6 +410,7 @@ class Command(BaseCommand):
                 defaults={
                     "description": fake.paragraph(nb_sentences=3),
                     "category": random.choice([c for _, c in PODCAST_SERIES]),
+                    "cover": self._ri(images, "square"),
                 }
             )
             series_list.append(s)
@@ -331,7 +419,10 @@ class Command(BaseCommand):
         for series in series_list:
             for ep_num in range(1, per_series + 1):
                 slug = f"ep-{series.pk}-{ep_num}-{fake.slug()}"[:319]
-                pub = fake.date_time_between(start_date="-2y", end_date="now", tzinfo=timezone.get_current_timezone())
+                pub = fake.date_time_between(
+                    start_date="-2y", end_date="now",
+                    tzinfo=timezone.get_current_timezone(),
+                )
                 batch.append(PodcastEpisode(
                     series=series,
                     title=f"Épisode {ep_num}: {fake.catch_phrase()}"[:299],
@@ -340,6 +431,7 @@ class Command(BaseCommand):
                     duration=f"{random.randint(15, 90)}:{random.randint(0, 59):02d}",
                     episode_number=ep_num,
                     season_number=random.randint(1, 3),
+                    cover=self._ri(images, "square"),
                     play_count=random.randint(100, 50000),
                     is_featured=(ep_num == 1),
                     published_at=pub,
@@ -351,13 +443,16 @@ class Command(BaseCommand):
             s.save(update_fields=["episode_count"])
         self.stdout.write(f"Created {len(batch)} podcast episodes")
 
-    def _seed_webtv_videos(self, count: int, artists):
+    def _seed_webtv_videos(self, count: int, artists, images: dict):
         from apps.webtv.models import WebTVVideo
         batch = []
         for i in range(count):
             category = random.choice(VIDEO_CATEGORIES)
             slug = f"video-{i}-{fake.slug()}"[:319]
-            pub = fake.date_time_between(start_date="-2y", end_date="now", tzinfo=timezone.get_current_timezone())
+            pub = fake.date_time_between(
+                start_date="-2y", end_date="now",
+                tzinfo=timezone.get_current_timezone(),
+            )
             batch.append(WebTVVideo(
                 title=f"{fake.catch_phrase()}"[:299],
                 slug=slug,
@@ -365,6 +460,7 @@ class Command(BaseCommand):
                 video_url=f"https://youtube.com/watch?v={fake.uuid4()[:11]}",
                 duration=f"{random.randint(2, 30)}:{random.randint(0, 59):02d}",
                 category=category,
+                thumbnail=self._ri(images, "thumbnail"),
                 is_premier=(category == "premiers" and i < 5),
                 location=random.choice(EVENT_CITIES + [""]),
                 view_count=random.randint(500, 500000),
@@ -376,12 +472,15 @@ class Command(BaseCommand):
             video.artists.set(random.sample(artists, min(2, len(artists))))
         self.stdout.write(f"Created {count} WebTV videos")
 
-    def _seed_emissions(self, count: int, artists):
+    def _seed_emissions(self, count: int, artists, images: dict):
         from apps.emissions.models import Emission
         statuses = ["live", "scheduled", "scheduled", "recorded"]
         batch = []
         for i in range(count):
-            sched = fake.date_time_between(start_date="-3m", end_date="+1m", tzinfo=timezone.get_current_timezone())
+            sched = fake.date_time_between(
+                start_date="-3m", end_date="+1m",
+                tzinfo=timezone.get_current_timezone(),
+            )
             slug = f"emission-{i}-{fake.slug()}"[:219]
             batch.append(Emission(
                 title=f"{fake.catch_phrase()}"[:199],
@@ -389,6 +488,7 @@ class Command(BaseCommand):
                 description=fake.paragraph(nb_sentences=3),
                 status=random.choice(statuses),
                 scheduled_at=sched,
+                cover=self._ri(images, "banner"),
                 duration_minutes=random.randint(30, 120),
                 viewer_count=random.randint(0, 2000),
                 total_views=random.randint(100, 50000),
@@ -399,12 +499,11 @@ class Command(BaseCommand):
             em.hosts.set(random.sample(artists, min(2, len(artists))))
         self.stdout.write(f"Created {count} emissions")
 
-    def _seed_community(self):
+    def _seed_community(self, images: dict):
         from apps.community.models import Challenge, CommunityPost, Poll, PollOption
         users = list(User.objects.all()[:30])
         if not users:
             return
-        # Posts
         post_types = ["talent", "art", "news"]
         posts = [
             CommunityPost(
@@ -416,7 +515,6 @@ class Command(BaseCommand):
             ) for _ in range(150)
         ]
         CommunityPost.objects.bulk_create(posts)
-        # Challenges
         for i in range(10):
             slug = f"challenge-{i}-{fake.slug()}"[:219]
             Challenge.objects.get_or_create(
@@ -424,12 +522,15 @@ class Command(BaseCommand):
                 defaults={
                     "title": f"Challenge: {fake.catch_phrase()}"[:199],
                     "description": fake.paragraph(nb_sentences=3),
+                    "cover": self._ri(images, "banner"),
                     "prize": random.choice(["500$", "Matériel studio", "Visibilité", ""]),
-                    "deadline": fake.date_time_between(start_date="now", end_date="+3m", tzinfo=timezone.get_current_timezone()),
+                    "deadline": fake.date_time_between(
+                        start_date="now", end_date="+3m",
+                        tzinfo=timezone.get_current_timezone(),
+                    ),
                     "participant_count": random.randint(10, 500),
                 }
             )
-        # Polls
         poll_questions = [
             "Quel artiste du Kivu devrait headliner le prochain Festival Amani?",
             "Quel genre musical représente le mieux la jeunesse congolaise?",

@@ -1,9 +1,13 @@
+from django.conf import settings
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
+from apps.accounts.views import EmailConfirmRedirectView
 
 
 @api_view(["GET"])
@@ -23,8 +27,42 @@ urlpatterns = [
     path("api/docs/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
     path("api/schema/swagger-ui/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
 
-    # Auth
+    # Auth API
     path("api/v1/auth/", include("apps.accounts.urls")),
+
+    # ── Allauth HTML-view overrides ───────────────────────────────────────────
+    # These patterns shadow allauth's built-in HTML views (included below via
+    # `accounts/`) and instead redirect browsers to the decoupled frontend.
+    # They must appear BEFORE `path("accounts/", include("allauth.urls"))`.
+    #
+    # 1. Email confirmation link clicked from inbox
+    re_path(
+        r"^accounts/confirm-email/(?P<key>[-:\w]+)/$",
+        EmailConfirmRedirectView.as_view(),
+        name="account_confirm_email",
+    ),
+    # 2. Password-reset key link clicked from inbox (allauth URL format)
+    re_path(
+        r"^accounts/password/reset/key/(?P<uidb36>[0-9A-Za-z_\-]+)-(?P<key>.+)/$",
+        RedirectView.as_view(
+            url=settings.FRONTEND_URL + "/password-reset-confirm/%(uidb36)s/%(key)s/",
+            permanent=False,
+        ),
+        name="account_reset_password_from_key",
+    ),
+    # 3. Django's built-in password_reset_confirm (safety net for any code that
+    #    still reverses this name with uidb64/token kwargs)
+    re_path(
+        r"^password-reset-confirm/(?P<uidb64>[0-9A-Za-z_\-]+)/(?P<token>[0-9A-Za-z]{1,13}-[0-9A-Za-z]{1,40})/$",
+        RedirectView.as_view(
+            url=settings.FRONTEND_URL + "/password-reset-confirm/%(uidb64)s/%(token)s/",
+            permanent=False,
+        ),
+        name="password_reset_confirm",
+    ),
+
+    # Allauth fallback (OAuth2 callback URLs, social account management)
+    path("accounts/", include("allauth.urls")),
 
     # Resources
     path("api/v1/artists/", include("apps.artists.urls")),
