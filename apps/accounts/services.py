@@ -26,3 +26,29 @@ def update_user_profile(user: User, validated_data: dict) -> User:
         setattr(user, attr, value)
     user.save(update_fields=list(validated_data.keys()) + ["updated_at"])
     return user
+
+
+@transaction.atomic
+def bulk_update_users(items: list) -> int:
+    ids = [d["id"] for d in items]
+    obj_map = {o.pk: o for o in User.objects.filter(pk__in=ids)}
+    fields: set = set()
+    to_update = []
+    for data in items:
+        obj = obj_map.get(data["id"])
+        if not obj:
+            continue
+        for k, v in data.items():
+            if k != "id":
+                setattr(obj, k, v)
+                fields.add(k)
+        to_update.append(obj)
+    if to_update and fields:
+        User.objects.bulk_update(to_update, list(fields), batch_size=500)
+    return len(to_update)
+
+
+@transaction.atomic
+def bulk_delete_users(ids: list) -> int:
+    deleted, _ = User.objects.filter(pk__in=ids).delete()
+    return deleted

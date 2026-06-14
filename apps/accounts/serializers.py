@@ -67,3 +67,15 @@ class ListenHistorySerializer(serializers.ModelSerializer):
             "subtitle", "cover_image", "progress_percent", "listened_at",
         ]
         read_only_fields = ["listened_at"]
+
+
+class UserBulkUpdateItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField(min_value=1)
+    role = serializers.ChoiceField(choices=User.ROLE_CHOICES, required=False)
+    is_active = serializers.BooleanField(required=False)
+    is_verified = serializers.BooleanField(required=False)
+    is_staff = serializers.BooleanField(required=False)
+
+
+class UserBulkUpdateSerializer(serializers.Serializer):
+    items = UserBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)

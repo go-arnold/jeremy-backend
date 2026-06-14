@@ -9,12 +9,14 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from core.permissions import IsSelfOrAdmin
+from core.serializers import BulkDeleteSerializer
 
 from . import services
 from .models import ListenHistory, User
 from .serializers import (
     ListenHistorySerializer,
     UserAdminSerializer,
+    UserBulkUpdateSerializer,
     UserPublicSerializer,
     UserSerializer,
 )
@@ -104,3 +106,19 @@ class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMix
         user = self.get_object()
         qs = ListenHistory.objects.filter(user=user).order_by("-listened_at")[:50]
         return Response(ListenHistorySerializer(qs, many=True).data)
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_update(self, request):
+        ser = UserBulkUpdateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        count = services.bulk_update_users(ser.validated_data["items"])
+        return Response({"updated": count})
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def bulk_delete(self, request):
+        ser = BulkDeleteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        # Prevent self-deletion
+        ids = [i for i in ser.validated_data["ids"] if i != request.user.pk]
+        count = services.bulk_delete_users(ids)
+        return Response({"deleted": count})
