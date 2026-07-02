@@ -308,6 +308,25 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
     "SWAGGER_UI_SETTINGS": {"deepLinking": True},
+    # Strips "/api/v1" before auto-deriving a tag from the first remaining path
+    # segment. Without this every operation falls under the path prefix itself
+    # (a single "v1" tag for the whole API) instead of grouping by resource.
+    "SCHEMA_PATH_PREFIX": r"/api/v1",
+    "TAGS": [
+        {"name": "System", "description": "Health checks and infrastructure endpoints"},
+        {"name": "Auth", "description": "Registration, login, JWT and Google OAuth"},
+        {"name": "Users", "description": "User profiles, favorites, listen history"},
+        {"name": "Artists", "description": "Artist profiles, genres, releases, gallery"},
+        {"name": "Articles", "description": "Blog articles"},
+        {"name": "Events", "description": "Events, schedules, registrations"},
+        {"name": "Podcasts", "description": "Podcast series and episodes"},
+        {"name": "Radio", "description": "Live radio program schedule and chat"},
+        {"name": "Web TV", "description": "Video content: freestyles, studio, docs"},
+        {"name": "Community", "description": "Talent posts, challenges, polls"},
+        {"name": "Releases", "description": "Music releases and premieres"},
+        {"name": "Emissions", "description": "Scheduled live broadcast shows"},
+        {"name": "Home", "description": "Aggregated homepage payload"},
+    ],
 }
 
 # ── Logging ───────────────────────────────────────────────────────────────────

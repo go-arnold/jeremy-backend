@@ -1,12 +1,15 @@
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
-from dj_rest_auth.registration.views import SocialLoginView
+from dj_rest_auth.registration.views import RegisterView, SocialLoginView, VerifyEmailView
+from dj_rest_auth.views import LoginView, LogoutView, PasswordResetConfirmView, PasswordResetView
 from django.conf import settings
 from django.shortcuts import redirect
 from django.views import View
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, mixins, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.permissions import IsSelfOrAdmin
 from core.serializers import BulkDeleteSerializer
@@ -21,8 +24,48 @@ from .serializers import (
 )
 
 
+@extend_schema(tags=["Auth"])
 class GoogleLoginView(SocialLoginView):
     adapter_class = GoogleOAuth2Adapter
+
+
+# Thin subclasses purely to attach an OpenAPI tag: extend_schema() can't wrap
+# `SomeThirdPartyView.as_view()` directly when the view doesn't implement every
+# HTTP method (it unconditionally sets kwargs on all of Django's
+# http_method_names), so the class itself must carry the decorator instead.
+@extend_schema(tags=["Auth"])
+class TaggedRegisterView(RegisterView):
+    pass
+
+
+@extend_schema(tags=["Auth"])
+class TaggedLoginView(LoginView):
+    pass
+
+
+@extend_schema(tags=["Auth"])
+class TaggedLogoutView(LogoutView):
+    pass
+
+
+@extend_schema(tags=["Auth"])
+class TaggedTokenRefreshView(TokenRefreshView):
+    pass
+
+
+@extend_schema(tags=["Auth"])
+class TaggedVerifyEmailView(VerifyEmailView):
+    pass
+
+
+@extend_schema(tags=["Auth"])
+class TaggedPasswordResetView(PasswordResetView):
+    pass
+
+
+@extend_schema(tags=["Auth"])
+class TaggedPasswordResetConfirmView(PasswordResetConfirmView):
+    pass
 
 
 class EmailConfirmRedirectView(View):
@@ -32,6 +75,7 @@ class EmailConfirmRedirectView(View):
         return redirect(f"{settings.FRONTEND_URL}/verify-email?key={key}")
 
 
+@extend_schema(tags=["Auth"])
 class MeView(generics.RetrieveUpdateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = UserSerializer
@@ -44,6 +88,7 @@ class MeView(generics.RetrieveUpdateAPIView):
         return super().update(request, *args, **kwargs)
 
 
+@extend_schema(tags=["Users"])
 class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMixin):
     lookup_field = "id"
     permission_classes = [permissions.IsAuthenticated]

@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -20,6 +21,7 @@ from .serializers import (
 )
 
 
+@extend_schema(tags=["Community"])
 class CommunityPostViewSet(ModelViewSet):
     pagination_class = StandardPagination
     http_method_names = ["get", "post", "delete"]
@@ -64,6 +66,7 @@ class CommunityPostViewSet(ModelViewSet):
         return Response({"deleted": count})
 
 
+@extend_schema(tags=["Community"])
 class ChallengeViewSet(ModelViewSet):
     pagination_class = StandardPagination
     lookup_field = "slug"
@@ -113,6 +116,7 @@ class ChallengeViewSet(ModelViewSet):
         return Response({"deleted": count})
 
 
+@extend_schema(tags=["Community"])
 class PollViewSet(ModelViewSet):
     pagination_class = StandardPagination
 
