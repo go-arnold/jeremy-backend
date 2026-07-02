@@ -3,8 +3,10 @@ from celery import shared_task
 
 @shared_task(queue="default")
 def update_emission_statuses() -> None:
-    from django.utils import timezone
     from datetime import timedelta
+
+    from django.utils import timezone
+
     from .models import Emission
 
     now = timezone.now()
@@ -17,7 +19,8 @@ def update_emission_statuses() -> None:
     # live → recorded (after scheduled + duration)
     live_emissions = Emission.objects.filter(status=Emission.STATUS_LIVE)
     past_ids = [
-        e.pk for e in live_emissions
+        e.pk
+        for e in live_emissions
         if e.scheduled_at and (e.scheduled_at + timedelta(minutes=e.duration_minutes)) < now
     ]
     if past_ids:

@@ -59,6 +59,7 @@ class Challenge(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             from core.utils import make_slug
+
             self.slug = make_slug(self.title, Challenge)
         super().save(*args, **kwargs)
 

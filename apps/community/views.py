@@ -131,7 +131,6 @@ class PollViewSet(ModelViewSet):
 
     def perform_create(self, serializer):
         poll = services.create_poll(dict(serializer.validated_data))
-        # Return full read representation after create
         serializer.instance = poll
 
     def perform_update(self, serializer):
@@ -144,7 +143,6 @@ class PollViewSet(ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
-        # Respond with the read serializer so the caller gets options back
         return Response(
             PollSerializer(serializer.instance).data,
             status=status.HTTP_201_CREATED,

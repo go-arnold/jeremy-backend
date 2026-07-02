@@ -32,9 +32,18 @@ class ArticleListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Article
         fields = [
-            "id", "title", "slug", "excerpt", "featured_image_url",
-            "category", "author_name", "read_time", "view_count",
-            "like_count", "is_featured", "published_at",
+            "id",
+            "title",
+            "slug",
+            "excerpt",
+            "featured_image_url",
+            "category",
+            "author_name",
+            "read_time",
+            "view_count",
+            "like_count",
+            "is_featured",
+            "published_at",
         ]
 
     def get_featured_image_url(self, obj):
@@ -66,10 +75,23 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Article
         fields = [
-            "id", "title", "slug", "excerpt", "content", "featured_image_url",
-            "category", "tags", "author", "article_type", "read_time",
-            "view_count", "like_count", "is_featured", "status",
-            "published_at", "comments",
+            "id",
+            "title",
+            "slug",
+            "excerpt",
+            "content",
+            "featured_image_url",
+            "category",
+            "tags",
+            "author",
+            "article_type",
+            "read_time",
+            "view_count",
+            "like_count",
+            "is_featured",
+            "status",
+            "published_at",
+            "comments",
         ]
 
     def get_featured_image_url(self, obj):
@@ -80,9 +102,18 @@ class ArticleWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Article
         fields = [
-            "title", "slug", "excerpt", "content", "featured_image",
-            "category", "tags", "article_type", "status",
-            "is_featured", "read_time", "scheduled_at",
+            "title",
+            "slug",
+            "excerpt",
+            "content",
+            "featured_image",
+            "category",
+            "tags",
+            "article_type",
+            "status",
+            "is_featured",
+            "read_time",
+            "scheduled_at",
         ]
         extra_kwargs = {"slug": {"required": False}}
 
@@ -100,9 +131,7 @@ class ArticleBulkUpdateItemSerializer(serializers.Serializer):
     category = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(), required=False, allow_null=True
     )
-    article_type = serializers.ChoiceField(
-        choices=Article.TYPE_CHOICES, required=False
-    )
+    article_type = serializers.ChoiceField(choices=Article.TYPE_CHOICES, required=False)
     status = serializers.ChoiceField(choices=Article.STATUS_CHOICES, required=False)
     is_featured = serializers.BooleanField(required=False)
     read_time = serializers.IntegerField(min_value=1, required=False)

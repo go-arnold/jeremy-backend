@@ -1,4 +1,5 @@
 import ssl
+from datetime import timedelta
 from pathlib import Path
 
 import cloudinary
@@ -96,7 +97,7 @@ ASGI_APPLICATION = "artdukivu.asgi.application"
 # ── Database with connection pooling ─────────────────────────────────────────
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
+        "ENGINE": "dj_db_conn_pool.backends.postgresql",
         "NAME": config("DB_NAME", default="artdukivu"),
         "USER": config("DB_USER", default="matabar"),
         "PASSWORD": config("DB_PASSWORD", default=""),
@@ -114,9 +115,7 @@ DATABASES = {
 AUTH_USER_MODEL = "accounts.User"
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
@@ -171,7 +170,7 @@ CACHES = {
         "LOCATION": REDIS_URL,
         "OPTIONS": _redis_options,
         "KEY_PREFIX": "artdukivu",
-        "TIMEOUT": 60 * 15,  # 15 min default
+        "TIMEOUT": 60 * 15,
     }
 }
 
@@ -187,25 +186,21 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 300
-CELERY_BROKER_USE_SSL = (
-    {"ssl_cert_reqs": ssl.CERT_NONE} if REDIS_URL.startswith("rediss://") else None
-)
-CELERY_REDIS_BACKEND_USE_SSL = (
-    {"ssl_cert_reqs": ssl.CERT_NONE} if REDIS_URL.startswith("rediss://") else None
-)
+CELERY_BROKER_USE_SSL = {"ssl_cert_reqs": ssl.CERT_NONE} if REDIS_URL.startswith("rediss://") else None
+CELERY_REDIS_BACKEND_USE_SSL = {"ssl_cert_reqs": ssl.CERT_NONE} if REDIS_URL.startswith("rediss://") else None
 
 CELERY_BEAT_SCHEDULE = {
     "update-event-statuses": {
         "task": "apps.events.tasks.update_event_statuses",
-        "schedule": 3600,  # hourly
+        "schedule": 3600,
     },
     "warm-featured-cache": {
         "task": "apps.artists.tasks.warm_featured_cache",
-        "schedule": 1800,  # every 30 min
+        "schedule": 1800,
     },
     "cleanup-expired-chat": {
         "task": "apps.radio.tasks.cleanup_old_chat",
-        "schedule": 86400,  # daily
+        "schedule": 86400,
     },
     "update-emission-statuses": {
         "task": "apps.emissions.tasks.update_emission_statuses",
@@ -243,8 +238,6 @@ REST_FRAMEWORK = {
 }
 
 # ── SimpleJWT ─────────────────────────────────────────────────────────────────
-from datetime import timedelta
-
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
@@ -275,7 +268,6 @@ ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = ""
 ACCOUNT_DEFAULT_HTTP_PROTOCOL = "http"
 
-# Custom adapters redirect email/password-reset links to the frontend
 ACCOUNT_ADAPTER = "apps.accounts.adapters.AccountAdapter"
 SOCIALACCOUNT_ADAPTER = "apps.accounts.adapters.SocialAccountAdapter"
 

@@ -10,9 +10,18 @@ class VideoListSerializer(serializers.ModelSerializer):
     class Meta:
         model = WebTVVideo
         fields = [
-            "id", "title", "slug", "thumbnail_url", "duration",
-            "category", "is_premier", "is_live", "location",
-            "artist_names", "view_count", "published_at",
+            "id",
+            "title",
+            "slug",
+            "thumbnail_url",
+            "duration",
+            "category",
+            "is_premier",
+            "is_live",
+            "location",
+            "artist_names",
+            "view_count",
+            "published_at",
         ]
 
     def get_thumbnail_url(self, obj):
@@ -28,9 +37,19 @@ class VideoDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = WebTVVideo
         fields = [
-            "id", "title", "slug", "description", "thumbnail_url",
-            "video_url", "duration", "category", "is_premier", "is_live",
-            "location", "view_count", "published_at",
+            "id",
+            "title",
+            "slug",
+            "description",
+            "thumbnail_url",
+            "video_url",
+            "duration",
+            "category",
+            "is_premier",
+            "is_live",
+            "location",
+            "view_count",
+            "published_at",
         ]
 
     def get_thumbnail_url(self, obj):
@@ -41,9 +60,18 @@ class VideoWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = WebTVVideo
         fields = [
-            "title", "slug", "description", "thumbnail", "video_url",
-            "duration", "category", "is_premier", "is_live", "location",
-            "artists", "published_at",
+            "title",
+            "slug",
+            "description",
+            "thumbnail",
+            "video_url",
+            "duration",
+            "category",
+            "is_premier",
+            "is_live",
+            "location",
+            "artists",
+            "published_at",
         ]
         extra_kwargs = {"slug": {"required": False}}
 

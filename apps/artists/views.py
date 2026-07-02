@@ -1,3 +1,5 @@
+from django.core.cache import cache
+from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from rest_framework import permissions, status
@@ -49,15 +51,16 @@ class ArtistViewSet(ModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         slug = kwargs.get("slug")
-        from django.core.cache import cache
         cache_key = f"artists:detail:{slug}"
         data = cache.get(cache_key)
         if data is None:
-            instance = self.get_object()
-            qs = Artist.objects.prefetch_related(
-                "genres", "releases", "videos", "gallery"
-            ).get(slug=slug)
-            data = ArtistDetailSerializer(qs).data
+            # IsAdminOrReadOnly grants GET unconditionally and has no
+            # has_object_permission override, so get_object() would only add
+            # a redundant permission-check query here — go straight to the
+            # prefetching query and 404 if the slug doesn't exist.
+            qs = Artist.objects.prefetch_related("genres", "releases", "videos", "gallery")
+            instance = get_object_or_404(qs, slug=slug)
+            data = ArtistDetailSerializer(instance).data
             cache.set(cache_key, data, 60 * 15)
         return Response(data)
 

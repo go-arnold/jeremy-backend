@@ -14,6 +14,7 @@ CALENDAR_KEY = "releases:calendar"
 def create_release(validated_data: dict) -> MusicRelease:
     release = MusicRelease.objects.create(**validated_data)
     from apps.artists.models import Artist
+
     Artist.objects.filter(pk=release.artist_id).update(release_count=F("release_count") + 1)
     _invalidate()
     return release
@@ -34,6 +35,7 @@ def delete_release(release: MusicRelease) -> None:
     _invalidate()
     release.delete()
     from apps.artists.models import Artist
+
     Artist.objects.filter(pk=artist_id).update(release_count=F("release_count") - 1)
 
 
@@ -41,6 +43,7 @@ def delete_release(release: MusicRelease) -> None:
 def bulk_create_releases(items: list) -> list:
     from apps.artists.models import Artist
     from core.utils import gen_unique_slug
+
     used: set = set()
     objs = []
     for data in items:
@@ -53,7 +56,8 @@ def bulk_create_releases(items: list) -> list:
     counts = Counter(r.artist_id for r in created)
     if counts:
         Artist.objects.filter(pk__in=counts.keys()).update(
-            release_count=F("release_count") + Case(
+            release_count=F("release_count")
+            + Case(
                 *[When(pk=aid, then=Value(cnt)) for aid, cnt in counts.items()],
                 output_field=IntegerField(),
             )
@@ -86,13 +90,13 @@ def bulk_update_releases(items: list) -> int:
 @transaction.atomic
 def bulk_delete_releases(ids: list) -> int:
     from apps.artists.models import Artist
-    counts = Counter(
-        MusicRelease.objects.filter(pk__in=ids).values_list("artist_id", flat=True)
-    )
+
+    counts = Counter(MusicRelease.objects.filter(pk__in=ids).values_list("artist_id", flat=True))
     deleted, _ = MusicRelease.objects.filter(pk__in=ids).delete()
     if counts:
         Artist.objects.filter(pk__in=counts.keys()).update(
-            release_count=F("release_count") - Case(
+            release_count=F("release_count")
+            - Case(
                 *[When(pk=aid, then=Value(cnt)) for aid, cnt in counts.items()],
                 output_field=IntegerField(),
             )

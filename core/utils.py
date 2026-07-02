@@ -5,7 +5,6 @@ from django.utils.text import slugify
 
 
 def make_slug(text: str, model_class, field: str = "slug") -> str:
-    """Generate a unique slug for a model instance."""
     base = slugify(text)
     slug = base
     counter = 1
@@ -16,21 +15,18 @@ def make_slug(text: str, model_class, field: str = "slug") -> str:
 
 
 def invalidate_cache_pattern(pattern: str) -> None:
-    """Delete all cache keys matching a pattern (requires Redis backend)."""
     try:
         cache.delete_pattern(f"*{pattern}*")
     except AttributeError:
-        # LocMemCache doesn't support delete_pattern; clear all in dev
+        # delete_pattern is Redis-only; LocMemCache (local dev) lacks it, so this is a no-op there.
         pass
 
 
 def invalidate_resource_cache(resource: str) -> None:
-    """Invalidate all cache keys for a given resource (e.g. 'artists')."""
     invalidate_cache_pattern(f":{resource}:")
 
 
 def gen_unique_slug(text: str, model_class, used_slugs: set, field: str = "slug") -> str:
-    """Generate a unique slug, checking both the DB and an in-batch used_slugs set."""
     base = slugify(text)
     slug = base
     counter = 1
@@ -42,6 +38,5 @@ def gen_unique_slug(text: str, model_class, used_slugs: set, field: str = "slug"
 
 
 def read_time_minutes(text: str) -> int:
-    """Estimate reading time in minutes (200 words/min)."""
     word_count = len(re.findall(r"\w+", text))
     return max(1, round(word_count / 200))

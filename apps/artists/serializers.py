@@ -15,9 +15,15 @@ class ReleaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Release
         fields = [
-            "id", "title", "slug", "cover_url",
-            "release_date", "format", "streaming_links",
-            "description", "preview_url",
+            "id",
+            "title",
+            "slug",
+            "cover_url",
+            "release_date",
+            "format",
+            "streaming_links",
+            "description",
+            "preview_url",
         ]
 
     def get_cover_url(self, obj):
@@ -48,6 +54,7 @@ class ArtistPhotoSerializer(serializers.ModelSerializer):
 
 class ArtistListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list endpoints."""
+
     photo_url = serializers.SerializerMethodField()
     # genres annotated as array of names from view
     genre_names = serializers.SerializerMethodField()
@@ -55,8 +62,13 @@ class ArtistListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Artist
         fields = [
-            "id", "name", "slug", "city", "photo_url",
-            "is_featured", "genre_names",
+            "id",
+            "name",
+            "slug",
+            "city",
+            "photo_url",
+            "is_featured",
+            "genre_names",
         ]
 
     def get_photo_url(self, obj):
@@ -78,10 +90,23 @@ class ArtistDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Artist
         fields = [
-            "id", "name", "slug", "bio", "city", "country",
-            "photo_url", "cover_url", "genres", "is_featured",
-            "social_links", "release_count", "video_count",
-            "releases", "videos", "gallery", "created_at",
+            "id",
+            "name",
+            "slug",
+            "bio",
+            "city",
+            "country",
+            "photo_url",
+            "cover_url",
+            "genres",
+            "is_featured",
+            "social_links",
+            "release_count",
+            "video_count",
+            "releases",
+            "videos",
+            "gallery",
+            "created_at",
         ]
 
     def get_photo_url(self, obj):
@@ -95,8 +120,16 @@ class ArtistWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Artist
         fields = [
-            "name", "slug", "bio", "city", "country",
-            "photo", "cover_image", "genres", "is_featured", "social_links",
+            "name",
+            "slug",
+            "bio",
+            "city",
+            "country",
+            "photo",
+            "cover_image",
+            "genres",
+            "is_featured",
+            "social_links",
         ]
         extra_kwargs = {"slug": {"required": False}}
 

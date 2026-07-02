@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F
 
 from .models import Challenge, CommunityPost, Poll, PollOption, PollVote, PostLike
@@ -78,6 +78,7 @@ def bulk_delete_posts(ids: list) -> int:
 @transaction.atomic
 def bulk_create_challenges(items: list) -> list:
     from core.utils import gen_unique_slug
+
     used: set = set()
     objs = []
     for data in items:
@@ -128,7 +129,13 @@ def vote_poll(poll: Poll, user, option_id: int) -> dict:
         return {"error": "invalid_option"}
     if PollVote.objects.filter(poll=poll, user=user).exists():
         return {"error": "already_voted"}
-    PollVote.objects.create(poll=poll, user=user, option=option)
+    try:
+        with transaction.atomic():
+            PollVote.objects.create(poll=poll, user=user, option=option)
+    except IntegrityError:
+        # Concurrent request won the race against the .exists() check above;
+        # the unique_together("poll", "user") constraint caught the duplicate.
+        return {"error": "already_voted"}
     PollOption.objects.filter(pk=option.pk).update(vote_count=F("vote_count") + 1)
     Poll.objects.filter(pk=poll.pk).update(vote_count=F("vote_count") + 1)
     return {"ok": True}

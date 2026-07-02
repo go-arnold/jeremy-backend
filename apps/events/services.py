@@ -44,15 +44,14 @@ def register_for_event(event: Event, user) -> dict:
     _, created = EventRegistration.objects.get_or_create(event=event, user=user)
     if not created:
         return {"error": "already_registered"}
-    Event.objects.filter(pk=event.pk).update(
-        current_registrations=event.current_registrations + 1
-    )
+    Event.objects.filter(pk=event.pk).update(current_registrations=event.current_registrations + 1)
     return {"ok": True}
 
 
 @transaction.atomic
 def bulk_create_events(items: list) -> list:
     from core.utils import gen_unique_slug
+
     used: set = set()
     artist_map = []
     objs = []
@@ -65,11 +64,7 @@ def bulk_create_events(items: list) -> list:
         objs.append(Event(**d))
     created = Event.objects.bulk_create(objs, batch_size=500)
     Through = Event.artists.through
-    m2m = [
-        Through(event=ev, artist=a)
-        for ev, artists in zip(created, artist_map)
-        for a in artists
-    ]
+    m2m = [Through(event=ev, artist=a) for ev, artists in zip(created, artist_map) for a in artists]
     if m2m:
         Through.objects.bulk_create(m2m, batch_size=500, ignore_conflicts=True)
     _invalidate()

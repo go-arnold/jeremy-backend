@@ -27,9 +27,19 @@ class EventListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = [
-            "id", "title", "slug", "image_url", "date", "end_date",
-            "city_name", "venue_name", "category", "status",
-            "is_featured", "ticket_price", "registration_progress",
+            "id",
+            "title",
+            "slug",
+            "image_url",
+            "date",
+            "end_date",
+            "city_name",
+            "venue_name",
+            "category",
+            "status",
+            "is_featured",
+            "ticket_price",
+            "registration_progress",
         ]
 
     def get_image_url(self, obj):
@@ -51,11 +61,27 @@ class EventDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = [
-            "id", "title", "slug", "description", "image_url", "date", "end_date",
-            "city", "venue_name", "venue_address", "category", "status",
-            "is_featured", "ticket_price", "ticket_link", "max_capacity",
-            "current_registrations", "registration_progress",
-            "artists", "schedule", "created_at",
+            "id",
+            "title",
+            "slug",
+            "description",
+            "image_url",
+            "date",
+            "end_date",
+            "city",
+            "venue_name",
+            "venue_address",
+            "category",
+            "status",
+            "is_featured",
+            "ticket_price",
+            "ticket_link",
+            "max_capacity",
+            "current_registrations",
+            "registration_progress",
+            "artists",
+            "schedule",
+            "created_at",
         ]
 
     def get_image_url(self, obj):
@@ -71,9 +97,22 @@ class EventWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Event
         fields = [
-            "title", "slug", "description", "image", "date", "end_date",
-            "venue_name", "venue_address", "city", "category", "status",
-            "is_featured", "ticket_price", "ticket_link", "max_capacity", "artists",
+            "title",
+            "slug",
+            "description",
+            "image",
+            "date",
+            "end_date",
+            "venue_name",
+            "venue_address",
+            "city",
+            "category",
+            "status",
+            "is_featured",
+            "ticket_price",
+            "ticket_link",
+            "max_capacity",
+            "artists",
         ]
         extra_kwargs = {"slug": {"required": False}}
 
@@ -86,15 +125,11 @@ class EventBulkUpdateItemSerializer(serializers.Serializer):
     end_date = serializers.DateTimeField(required=False, allow_null=True)
     venue_name = serializers.CharField(max_length=200, required=False)
     venue_address = serializers.CharField(max_length=300, required=False, allow_blank=True)
-    city = serializers.PrimaryKeyRelatedField(
-        queryset=City.objects.all(), required=False, allow_null=True
-    )
+    city = serializers.PrimaryKeyRelatedField(queryset=City.objects.all(), required=False, allow_null=True)
     category = serializers.ChoiceField(choices=Event.CATEGORY_CHOICES, required=False)
     status = serializers.ChoiceField(choices=Event.STATUS_CHOICES, required=False)
     is_featured = serializers.BooleanField(required=False)
-    ticket_price = serializers.DecimalField(
-        max_digits=10, decimal_places=2, required=False, allow_null=True
-    )
+    ticket_price = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, allow_null=True)
     ticket_link = serializers.URLField(required=False, allow_blank=True)
     max_capacity = serializers.IntegerField(min_value=1, required=False, allow_null=True)
 

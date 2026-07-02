@@ -52,6 +52,7 @@ class Artist(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             from core.utils import make_slug
+
             self.slug = make_slug(self.name, Artist)
         super().save(*args, **kwargs)
 

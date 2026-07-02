@@ -39,6 +39,7 @@ def delete_video(video: WebTVVideo) -> None:
 @transaction.atomic
 def bulk_create_videos(items: list) -> list:
     from core.utils import gen_unique_slug
+
     used: set = set()
     artist_map = []
     objs = []
@@ -51,11 +52,7 @@ def bulk_create_videos(items: list) -> list:
         objs.append(WebTVVideo(**d))
     created = WebTVVideo.objects.bulk_create(objs, batch_size=500)
     Through = WebTVVideo.artists.through
-    m2m = [
-        Through(webtvvideo=v, artist=a)
-        for v, artists in zip(created, artist_map)
-        for a in artists
-    ]
+    m2m = [Through(webtvvideo=v, artist=a) for v, artists in zip(created, artist_map) for a in artists]
     if m2m:
         Through.objects.bulk_create(m2m, batch_size=500, ignore_conflicts=True)
     cache.delete(PREMIERS_KEY)

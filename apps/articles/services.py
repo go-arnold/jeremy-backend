@@ -58,6 +58,7 @@ def toggle_like(article: Article, user) -> dict:
 @transaction.atomic
 def bulk_create_articles(items: list, author) -> list:
     from core.utils import gen_unique_slug
+
     used: set = set()
     tag_map = []
     objs = []
@@ -70,11 +71,7 @@ def bulk_create_articles(items: list, author) -> list:
         objs.append(Article(author=author, **d))
     created = Article.objects.bulk_create(objs, batch_size=500)
     Through = Article.tags.through
-    m2m = [
-        Through(article=a, tag=t)
-        for a, tags in zip(created, tag_map)
-        for t in tags
-    ]
+    m2m = [Through(article=a, tag=t) for a, tags in zip(created, tag_map) for t in tags]
     if m2m:
         Through.objects.bulk_create(m2m, batch_size=500, ignore_conflicts=True)
     return created

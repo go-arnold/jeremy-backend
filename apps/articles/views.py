@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from core.pagination import StandardPagination
-from core.permissions import IsAdminOrReadOnly, IsOwnerOrAdmin
+from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
 
 from . import services
@@ -36,9 +36,19 @@ class ArticleViewSet(ModelViewSet):
             .select_related("author", "category")
             .prefetch_related("tags")
             .only(
-                "id", "title", "slug", "excerpt", "featured_image",
-                "is_featured", "read_time", "view_count", "like_count",
-                "published_at", "author__username", "category__name", "category__slug",
+                "id",
+                "title",
+                "slug",
+                "excerpt",
+                "featured_image",
+                "is_featured",
+                "read_time",
+                "view_count",
+                "like_count",
+                "published_at",
+                "author__username",
+                "category__name",
+                "category__slug",
             )
         )
         article_type = self.request.query_params.get("type")
@@ -98,7 +108,8 @@ class ArticleViewSet(ModelViewSet):
         if not request.user.is_authenticated:
             return Response({"detail": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
         comment = services.add_comment(
-            article, request.user,
+            article,
+            request.user,
             request.data.get("content", ""),
             request.data.get("parent_id"),
         )

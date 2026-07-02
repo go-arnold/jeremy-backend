@@ -1,9 +1,8 @@
 from django.urls import path
+from django.views.decorators.cache import cache_page
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 
 
 @api_view(["GET"])
@@ -11,11 +10,11 @@ from django.views.decorators.cache import cache_page
 @cache_page(60 * 15)
 def home_view(request):
     """Aggregated homepage payload — cached 15 minutes."""
-    from apps.artists.models import Artist
     from apps.articles.models import Article
-    from apps.releases.models import MusicRelease
-    from apps.artists.serializers import ArtistListSerializer
     from apps.articles.serializers import ArticleListSerializer
+    from apps.artists.models import Artist
+    from apps.artists.serializers import ArtistListSerializer
+    from apps.releases.models import MusicRelease
     from apps.releases.serializers import ReleaseListSerializer
 
     featured_artists = (
@@ -35,11 +34,13 @@ def home_view(request):
         .order_by("-release_date")[:10]
     )
 
-    return Response({
-        "featured_artists": ArtistListSerializer(featured_artists, many=True).data,
-        "latest_news": ArticleListSerializer(latest_news, many=True).data,
-        "top_releases": ReleaseListSerializer(top_releases, many=True).data,
-    })
+    return Response(
+        {
+            "featured_artists": ArtistListSerializer(featured_artists, many=True).data,
+            "latest_news": ArticleListSerializer(latest_news, many=True).data,
+            "top_releases": ReleaseListSerializer(top_releases, many=True).data,
+        }
+    )
 
 
 urlpatterns = [

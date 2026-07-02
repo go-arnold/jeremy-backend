@@ -77,11 +77,7 @@ class RadioChatViewSet(ModelViewSet):
     http_method_names = ["get", "post", "delete"]
 
     def get_queryset(self):
-        return (
-            RadioChat.objects.filter(is_deleted=False)
-            .select_related("user")
-            .order_by("-created_at")[:50]
-        )
+        return RadioChat.objects.filter(is_deleted=False).select_related("user").order_by("-created_at")[:50]
 
     def get_serializer_class(self):
         return RadioChatSerializer
@@ -105,8 +101,6 @@ class RadioChatViewSet(ModelViewSet):
 @permission_classes([permissions.AllowAny])
 @method_decorator(cache_page(60))
 def current_program(request):
-    """Returns the currently live or most recent program."""
-    from django.utils import timezone
     now = timezone.now()
     current_day = now.weekday()
     current_time = now.time()
@@ -119,10 +113,14 @@ def current_program(request):
     ).first()
 
     if not program:
-        program = RadioProgram.objects.filter(
-            day_of_week=current_day,
-            start_time__lte=current_time,
-        ).order_by("-start_time").first()
+        program = (
+            RadioProgram.objects.filter(
+                day_of_week=current_day,
+                start_time__lte=current_time,
+            )
+            .order_by("-start_time")
+            .first()
+        )
 
     if not program:
         return Response({"detail": "No program currently."}, status=status.HTTP_404_NOT_FOUND)
