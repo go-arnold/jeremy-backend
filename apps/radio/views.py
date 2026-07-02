@@ -127,5 +127,5 @@ def current_program(request):
         )
 
     if not program:
-        return Response({"detail": "No program currently."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "Aucun programme en cours."}, status=status.HTTP_404_NOT_FOUND)
     return Response(RadioProgramSerializer(program).data)

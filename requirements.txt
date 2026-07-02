@@ -27,6 +27,15 @@ drf-spectacular==0.29.0
 django-cors-headers==4.9.0
 django-filter==25.2
 
+# Search
+django-elasticsearch-dsl==9.0
+# Pinned below django-elasticsearch-dsl's own resolved latest (9.4.x): that
+# combination silently produces empty _source on every indexed document (a
+# regression in elasticsearch.dsl's AttrDict internals between 9.0.3 and
+# 9.4.1) — confirmed against a live ES 9.0.2 cluster. Do not bump without
+# re-verifying prepare() actually populates fields.
+elasticsearch==9.0.3
+
 # Utils
 python-decouple==3.8
 Pillow==12.2.0

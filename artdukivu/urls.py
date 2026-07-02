@@ -62,4 +62,7 @@ urlpatterns = [
     path("api/v1/emissions/", include("apps.emissions.urls")),
     path("api/v1/users/", include("apps.accounts.user_urls")),
     path("api/v1/home/", include("apps.artists.home_urls")),
+    path("api/v1/analytics/", include("apps.analytics.urls")),
+    path("api/v1/newsletter/", include("apps.newsletter.urls")),
+    path("api/v1/search/", include("apps.search.urls")),
 ]

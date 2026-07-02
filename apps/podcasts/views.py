@@ -136,7 +136,7 @@ class PodcastEpisodeViewSet(ModelViewSet):
     def play(self, request, slug=None):
         episode = self.get_object()
         async_increment_play.delay(episode.pk)
-        return Response({"detail": "Play count updated."})
+        return Response({"detail": "Nombre d'écoutes mis à jour."})
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def bulk_create(self, request):

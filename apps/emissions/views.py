@@ -57,7 +57,9 @@ class EmissionViewSet(ModelViewSet):
     def live(self, request):
         emission = Emission.objects.filter(status=Emission.STATUS_LIVE).first()
         if not emission:
-            return Response({"detail": "No emission currently live."}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"detail": "Aucune émission en direct actuellement."}, status=status.HTTP_404_NOT_FOUND
+            )
         return Response(EmissionDetailSerializer(emission).data)
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])

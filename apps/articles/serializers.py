@@ -1,6 +1,9 @@
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from .models import Article, Category, Comment, Tag
+
+User = get_user_model()
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -13,6 +16,7 @@ class TagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tag
         fields = ["id", "name", "slug"]
+        extra_kwargs = {"slug": {"required": False}}
 
 
 class AuthorBriefSerializer(serializers.Serializer):
@@ -99,6 +103,10 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
 
 
 class ArticleWriteSerializer(serializers.ModelSerializer):
+    # Optional: only an admin may set this explicitly (enforced in the view,
+    # not here) — everyone else is authored as the connected user.
+    author = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+
     class Meta:
         model = Article
         fields = [
@@ -109,6 +117,7 @@ class ArticleWriteSerializer(serializers.ModelSerializer):
             "featured_image",
             "category",
             "tags",
+            "author",
             "article_type",
             "status",
             "is_featured",
@@ -119,7 +128,7 @@ class ArticleWriteSerializer(serializers.ModelSerializer):
 
     def validate_content(self, value):
         if not value.strip():
-            raise serializers.ValidationError("Content cannot be empty.")
+            raise serializers.ValidationError("Le contenu ne peut pas être vide.")
         return value
 
 

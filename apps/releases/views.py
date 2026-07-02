@@ -60,7 +60,7 @@ class ReleaseViewSet(ModelViewSet):
     def featured(self, request):
         release = MusicRelease.objects.filter(is_featured=True).select_related("artist").first()
         if not release:
-            return Response({"detail": "No featured release"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Aucune sortie à la une."}, status=status.HTTP_404_NOT_FOUND)
         return Response(ReleaseDetailSerializer(release).data)
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])

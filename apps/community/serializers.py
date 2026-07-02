@@ -35,7 +35,7 @@ class CommunityPostWriteSerializer(serializers.ModelSerializer):
 
     def validate_media(self, value):
         if len(value) > 10:
-            raise serializers.ValidationError("Maximum 10 media items per post.")
+            raise serializers.ValidationError("Maximum 10 médias par publication.")
         return value
 
 
@@ -113,7 +113,7 @@ class PollWriteSerializer(serializers.ModelSerializer):
 
     def validate_options(self, value):
         if len(value) < 2:
-            raise serializers.ValidationError("A poll must have at least 2 options.")
+            raise serializers.ValidationError("Un sondage doit avoir au moins 2 options.")
         if len(value) > 20:
-            raise serializers.ValidationError("A poll cannot have more than 20 options.")
+            raise serializers.ValidationError("Un sondage ne peut pas avoir plus de 20 options.")
         return value

@@ -68,7 +68,7 @@ class WebTVVideoViewSet(ModelViewSet):
     def view(self, request, slug=None):
         video = self.get_object()
         async_increment_view.delay(video.pk)
-        return Response({"detail": "View counted."})
+        return Response({"detail": "Vue comptabilisée."})
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def bulk_create(self, request):

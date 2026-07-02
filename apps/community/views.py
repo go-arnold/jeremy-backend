@@ -164,11 +164,17 @@ class PollViewSet(ModelViewSet):
         poll = self.get_object()
         option_id = request.data.get("option_id")
         if not option_id:
-            return Response({"detail": "option_id required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "option_id est requis."}, status=status.HTTP_400_BAD_REQUEST)
         result = services.vote_poll(poll, request.user, option_id)
         if result.get("error") == "invalid_option":
-            return Response({"detail": "Invalid option."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Option invalide.", "code": "invalid_option"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if result.get("error") == "already_voted":
-            return Response({"detail": "Already voted."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Vous avez déjà voté à ce sondage.", "code": "already_voted"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         poll.refresh_from_db()
         return Response(PollSerializer(poll).data)

@@ -26,7 +26,7 @@ def custom_exception_handler(exc, context):
     else:
         logger.exception("Unhandled exception in view", exc_info=exc)
         response = Response(
-            {"detail": "An unexpected error occurred.", "code": "server_error"},
+            {"detail": "Une erreur inattendue est survenue.", "code": "server_error"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
