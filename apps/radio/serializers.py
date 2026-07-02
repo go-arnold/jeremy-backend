@@ -10,9 +10,19 @@ class RadioProgramSerializer(serializers.ModelSerializer):
     class Meta:
         model = RadioProgram
         fields = [
-            "id", "title", "slug", "description", "cover_url",
-            "start_time", "end_time", "day_of_week", "day_name",
-            "presenter", "status", "stream_url", "listener_count",
+            "id",
+            "title",
+            "slug",
+            "description",
+            "cover_url",
+            "start_time",
+            "end_time",
+            "day_of_week",
+            "day_name",
+            "presenter",
+            "status",
+            "stream_url",
+            "listener_count",
         ]
 
     def get_cover_url(self, obj):
@@ -23,8 +33,16 @@ class RadioProgramWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = RadioProgram
         fields = [
-            "title", "slug", "description", "cover", "start_time", "end_time",
-            "day_of_week", "presenter", "status", "stream_url",
+            "title",
+            "slug",
+            "description",
+            "cover",
+            "start_time",
+            "end_time",
+            "day_of_week",
+            "presenter",
+            "status",
+            "stream_url",
         ]
         extra_kwargs = {"slug": {"required": False}}
 

@@ -78,6 +78,7 @@ class Event(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             from core.utils import make_slug
+
             self.slug = make_slug(self.title, Event)
         super().save(*args, **kwargs)
 
@@ -86,9 +87,7 @@ class EventScheduleItem(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="schedule")
     time = models.TimeField()
     title = models.CharField(max_length=200)
-    artist = models.ForeignKey(
-        "artists.Artist", null=True, blank=True, on_delete=models.SET_NULL
-    )
+    artist = models.ForeignKey("artists.Artist", null=True, blank=True, on_delete=models.SET_NULL)
     duration_minutes = models.PositiveSmallIntegerField(default=30)
     order = models.PositiveSmallIntegerField(default=0)
 

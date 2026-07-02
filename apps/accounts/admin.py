@@ -11,7 +11,10 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ("email", "username", "handle")
     ordering = ("-created_at",)
     fieldsets = BaseUserAdmin.fieldsets + (
-        ("Profile", {"fields": ("bio", "handle", "avatar", "cover_image", "role", "is_verified", "google_id")}),
+        (
+            "Profile",
+            {"fields": ("bio", "handle", "avatar", "cover_image", "role", "is_verified", "google_id")},
+        ),
         ("Stats", {"fields": ("listen_count",)}),
     )
 

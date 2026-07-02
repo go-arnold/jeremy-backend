@@ -10,8 +10,15 @@ class CommunityPostSerializer(serializers.ModelSerializer):
     class Meta:
         model = CommunityPost
         fields = [
-            "id", "author_name", "author_avatar", "content", "media",
-            "post_type", "like_count", "comment_count", "created_at",
+            "id",
+            "author_name",
+            "author_avatar",
+            "content",
+            "media",
+            "post_type",
+            "like_count",
+            "comment_count",
+            "created_at",
         ]
         read_only_fields = ["id", "author_name", "like_count", "comment_count", "created_at"]
 
@@ -38,8 +45,15 @@ class ChallengeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Challenge
         fields = [
-            "id", "title", "slug", "description", "cover_url",
-            "prize", "deadline", "participant_count", "is_active",
+            "id",
+            "title",
+            "slug",
+            "description",
+            "cover_url",
+            "prize",
+            "deadline",
+            "participant_count",
+            "is_active",
         ]
 
     def get_cover_url(self, obj):

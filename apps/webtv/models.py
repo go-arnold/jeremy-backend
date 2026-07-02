@@ -1,6 +1,5 @@
 from cloudinary.models import CloudinaryField
 from django.db import models
-from django.utils.text import slugify
 
 
 class WebTVVideo(models.Model):
@@ -45,5 +44,6 @@ class WebTVVideo(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             from core.utils import make_slug
+
             self.slug = make_slug(self.title, WebTVVideo)
         super().save(*args, **kwargs)

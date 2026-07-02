@@ -31,6 +31,7 @@ def delete_program(program: RadioProgram) -> None:
 @transaction.atomic
 def bulk_create_programs(items: list) -> list:
     from core.utils import gen_unique_slug
+
     used: set = set()
     objs = []
     for data in items:

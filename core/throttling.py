@@ -10,10 +10,8 @@ class UserBurstThrottle(UserRateThrottle):
 
 
 class AuthRateThrottle(AnonRateThrottle):
-    """Applied to login / register endpoints."""
     scope = "auth"
 
 
 class UploadRateThrottle(UserRateThrottle):
-    """Applied to file upload endpoints."""
     scope = "upload"

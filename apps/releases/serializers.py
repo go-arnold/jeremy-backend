@@ -11,9 +11,16 @@ class ReleaseListSerializer(serializers.ModelSerializer):
     class Meta:
         model = MusicRelease
         fields = [
-            "id", "title", "slug", "cover_url", "release_date",
-            "format", "is_featured", "is_premiere",
-            "artist_name", "artist_slug",
+            "id",
+            "title",
+            "slug",
+            "cover_url",
+            "release_date",
+            "format",
+            "is_featured",
+            "is_premiere",
+            "artist_name",
+            "artist_slug",
         ]
 
     def get_cover_url(self, obj):
@@ -27,9 +34,18 @@ class ReleaseDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = MusicRelease
         fields = [
-            "id", "title", "slug", "cover_url", "release_date",
-            "format", "is_featured", "is_premiere", "streaming_links",
-            "description", "preview_url", "artist_name",
+            "id",
+            "title",
+            "slug",
+            "cover_url",
+            "release_date",
+            "format",
+            "is_featured",
+            "is_premiere",
+            "streaming_links",
+            "description",
+            "preview_url",
+            "artist_name",
         ]
 
     def get_cover_url(self, obj):
@@ -40,8 +56,17 @@ class ReleaseWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = MusicRelease
         fields = [
-            "artist", "title", "slug", "cover", "release_date", "format",
-            "is_featured", "is_premiere", "streaming_links", "description", "preview_url",
+            "artist",
+            "title",
+            "slug",
+            "cover",
+            "release_date",
+            "format",
+            "is_featured",
+            "is_premiere",
+            "streaming_links",
+            "description",
+            "preview_url",
         ]
         extra_kwargs = {"slug": {"required": False}}
 

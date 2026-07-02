@@ -78,6 +78,7 @@ class Article(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             from core.utils import make_slug
+
             self.slug = make_slug(self.title, Article)
         super().save(*args, **kwargs)
 
@@ -93,11 +94,11 @@ class ArticleLike(models.Model):
 
 class Comment(models.Model):
     article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="comments")
-    author = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="comments"
-    )
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="comments")
     content = models.TextField(max_length=1000)
-    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.CASCADE, related_name="replies")
+    parent = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.CASCADE, related_name="replies"
+    )
     like_count = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

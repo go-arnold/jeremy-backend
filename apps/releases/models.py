@@ -1,6 +1,5 @@
 from cloudinary.models import CloudinaryField
 from django.db import models
-from django.utils.text import slugify
 
 
 class MusicRelease(models.Model):
@@ -17,9 +16,7 @@ class MusicRelease(models.Model):
         (FORMAT_EXPO, "Exposition"),
     ]
 
-    artist = models.ForeignKey(
-        "artists.Artist", on_delete=models.CASCADE, related_name="music_releases"
-    )
+    artist = models.ForeignKey("artists.Artist", on_delete=models.CASCADE, related_name="music_releases")
     title = models.CharField(max_length=200, db_index=True)
     slug = models.SlugField(max_length=220, unique=True)
     cover = CloudinaryField("cover", blank=True, null=True)
@@ -46,5 +43,6 @@ class MusicRelease(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             from core.utils import make_slug
+
             self.slug = make_slug(f"{self.artist_id}-{self.title}", MusicRelease)
         super().save(*args, **kwargs)

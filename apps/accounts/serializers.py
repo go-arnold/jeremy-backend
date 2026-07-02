@@ -26,9 +26,17 @@ class UserSerializer(UserDetailsSerializer):
     class Meta(UserDetailsSerializer.Meta):
         model = User
         fields = [
-            "id", "email", "username", "handle", "bio",
-            "role", "is_verified", "is_online",
-            "listen_count", "avatar_url", "created_at",
+            "id",
+            "email",
+            "username",
+            "handle",
+            "bio",
+            "role",
+            "is_verified",
+            "is_online",
+            "listen_count",
+            "avatar_url",
+            "created_at",
         ]
         read_only_fields = ["id", "email", "role", "is_verified", "listen_count", "created_at"]
 
@@ -53,8 +61,16 @@ class UserAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "email", "username", "handle", "bio", "role",
-            "is_active", "is_verified", "listen_count", "created_at",
+            "id",
+            "email",
+            "username",
+            "handle",
+            "bio",
+            "role",
+            "is_active",
+            "is_verified",
+            "listen_count",
+            "created_at",
         ]
         read_only_fields = ["id", "listen_count", "created_at"]
 
@@ -63,8 +79,14 @@ class ListenHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = ListenHistory
         fields = [
-            "id", "content_type", "content_id", "title",
-            "subtitle", "cover_image", "progress_percent", "listened_at",
+            "id",
+            "content_type",
+            "content_id",
+            "title",
+            "subtitle",
+            "cover_image",
+            "progress_percent",
+            "listened_at",
         ]
         read_only_fields = ["listened_at"]
 

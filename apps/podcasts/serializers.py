@@ -8,7 +8,16 @@ class PodcastSeriesListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PodcastSeries
-        fields = ["id", "title", "slug", "description", "cover_url", "category", "is_featured", "episode_count"]
+        fields = [
+            "id",
+            "title",
+            "slug",
+            "description",
+            "cover_url",
+            "category",
+            "is_featured",
+            "episode_count",
+        ]
 
     def get_cover_url(self, obj):
         return obj.cover.url if obj.cover else None
@@ -22,10 +31,19 @@ class EpisodeListSerializer(serializers.ModelSerializer):
     class Meta:
         model = PodcastEpisode
         fields = [
-            "id", "title", "slug", "description", "cover_url",
-            "duration", "episode_number", "season_number",
-            "play_count", "is_featured", "published_at",
-            "series_title", "series_slug",
+            "id",
+            "title",
+            "slug",
+            "description",
+            "cover_url",
+            "duration",
+            "episode_number",
+            "season_number",
+            "play_count",
+            "is_featured",
+            "published_at",
+            "series_title",
+            "series_slug",
         ]
 
     def get_cover_url(self, obj):
@@ -40,9 +58,19 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = PodcastEpisode
         fields = [
-            "id", "title", "slug", "description", "cover_url",
-            "audio_url", "duration", "episode_number", "season_number",
-            "guests", "play_count", "is_featured", "published_at",
+            "id",
+            "title",
+            "slug",
+            "description",
+            "cover_url",
+            "audio_url",
+            "duration",
+            "episode_number",
+            "season_number",
+            "guests",
+            "play_count",
+            "is_featured",
+            "published_at",
             "series",
         ]
 
@@ -59,9 +87,19 @@ class EpisodeWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = PodcastEpisode
         fields = [
-            "series", "title", "slug", "description", "cover",
-            "audio_file", "audio_url", "duration", "episode_number",
-            "season_number", "guests", "is_featured", "published_at",
+            "series",
+            "title",
+            "slug",
+            "description",
+            "cover",
+            "audio_file",
+            "audio_url",
+            "duration",
+            "episode_number",
+            "season_number",
+            "guests",
+            "is_featured",
+            "published_at",
         ]
         extra_kwargs = {"slug": {"required": False}}
 

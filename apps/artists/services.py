@@ -1,7 +1,7 @@
 from django.core.cache import cache
 from django.db import transaction
 
-from .models import Artist, ArtistPhoto, ArtistVideo, Genre, Release
+from .models import Artist
 
 CACHE_TTL = 60 * 30  # 30 min
 FEATURED_KEY = "artists:featured"
@@ -27,6 +27,7 @@ def create_artist(validated_data: dict, genres: list) -> Artist:
     artist.save()
     if genres:
         artist.genres.set(genres)
+    cache.delete(FEATURED_KEY)
     return artist
 
 
@@ -50,6 +51,7 @@ def _invalidate_artist_cache(artist: Artist) -> None:
 @transaction.atomic
 def bulk_create_artists(items: list) -> list:
     from core.utils import gen_unique_slug
+
     used: set = set()
     genre_map = []
     objs = []
@@ -62,11 +64,7 @@ def bulk_create_artists(items: list) -> list:
         objs.append(Artist(**d))
     created = Artist.objects.bulk_create(objs, batch_size=500)
     Through = Artist.genres.through
-    m2m = [
-        Through(artist=a, genre=g)
-        for a, genres in zip(created, genre_map)
-        for g in genres
-    ]
+    m2m = [Through(artist=a, genre=g) for a, genres in zip(created, genre_map) for g in genres]
     if m2m:
         Through.objects.bulk_create(m2m, batch_size=500, ignore_conflicts=True)
     cache.delete(FEATURED_KEY)
@@ -77,6 +75,7 @@ def bulk_create_artists(items: list) -> list:
 def bulk_update_artists(items: list) -> int:
     ids = [d["id"] for d in items]
     obj_map = {o.pk: o for o in Artist.objects.filter(pk__in=ids)}
+    original_slugs = {pk: obj.slug for pk, obj in obj_map.items()}
     fields: set = set()
     to_update = []
     for data in items:
@@ -90,13 +89,20 @@ def bulk_update_artists(items: list) -> int:
         to_update.append(obj)
     if to_update and fields:
         Artist.objects.bulk_update(to_update, list(fields), batch_size=500)
+    for obj in to_update:
+        cache.delete(f"artists:detail:{original_slugs[obj.pk]}")
+        if obj.slug != original_slugs[obj.pk]:
+            cache.delete(f"artists:detail:{obj.slug}")
     cache.delete(FEATURED_KEY)
     return len(to_update)
 
 
 @transaction.atomic
 def bulk_delete_artists(ids: list) -> int:
+    slugs = list(Artist.objects.filter(pk__in=ids).values_list("slug", flat=True))
     deleted, _ = Artist.objects.filter(pk__in=ids).delete()
+    for slug in slugs:
+        cache.delete(f"artists:detail:{slug}")
     cache.delete(FEATURED_KEY)
     return deleted
 

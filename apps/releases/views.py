@@ -88,8 +88,10 @@ class ReleaseViewSet(ModelViewSet):
     @method_decorator(cache_page(60 * 60))
     @action(detail=False, methods=["get"])
     def calendar(self, request):
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
+
         today = timezone.now().date()
         end = today + timedelta(days=60)
         releases = (

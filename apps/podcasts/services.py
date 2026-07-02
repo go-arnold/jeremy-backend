@@ -27,6 +27,7 @@ def delete_series(series: PodcastSeries) -> None:
 @transaction.atomic
 def bulk_create_series(items: list) -> list:
     from core.utils import gen_unique_slug
+
     used: set = set()
     objs = []
     for data in items:
@@ -66,9 +67,7 @@ def bulk_delete_series(ids: list) -> int:
 @transaction.atomic
 def create_episode(validated_data: dict) -> PodcastEpisode:
     episode = PodcastEpisode.objects.create(**validated_data)
-    PodcastSeries.objects.filter(pk=episode.series_id).update(
-        episode_count=F("episode_count") + 1
-    )
+    PodcastSeries.objects.filter(pk=episode.series_id).update(episode_count=F("episode_count") + 1)
     return episode
 
 
@@ -84,14 +83,13 @@ def update_episode(episode: PodcastEpisode, validated_data: dict) -> PodcastEpis
 def delete_episode(episode: PodcastEpisode) -> None:
     series_id = episode.series_id
     episode.delete()
-    PodcastSeries.objects.filter(pk=series_id).update(
-        episode_count=F("episode_count") - 1
-    )
+    PodcastSeries.objects.filter(pk=series_id).update(episode_count=F("episode_count") - 1)
 
 
 @transaction.atomic
 def bulk_create_episodes(items: list) -> list:
     from core.utils import gen_unique_slug
+
     used: set = set()
     objs = []
     for data in items:
@@ -103,7 +101,8 @@ def bulk_create_episodes(items: list) -> list:
     counts = Counter(e.series_id for e in created)
     if counts:
         PodcastSeries.objects.filter(pk__in=counts.keys()).update(
-            episode_count=F("episode_count") + Case(
+            episode_count=F("episode_count")
+            + Case(
                 *[When(pk=sid, then=Value(cnt)) for sid, cnt in counts.items()],
                 output_field=IntegerField(),
             )
@@ -133,13 +132,12 @@ def bulk_update_episodes(items: list) -> int:
 
 @transaction.atomic
 def bulk_delete_episodes(ids: list) -> int:
-    counts = Counter(
-        PodcastEpisode.objects.filter(pk__in=ids).values_list("series_id", flat=True)
-    )
+    counts = Counter(PodcastEpisode.objects.filter(pk__in=ids).values_list("series_id", flat=True))
     deleted, _ = PodcastEpisode.objects.filter(pk__in=ids).delete()
     if counts:
         PodcastSeries.objects.filter(pk__in=counts.keys()).update(
-            episode_count=F("episode_count") - Case(
+            episode_count=F("episode_count")
+            - Case(
                 *[When(pk=sid, then=Value(cnt)) for sid, cnt in counts.items()],
                 output_field=IntegerField(),
             )

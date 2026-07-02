@@ -39,6 +39,7 @@ def delete_emission(emission: Emission) -> None:
 @transaction.atomic
 def bulk_create_emissions(items: list) -> list:
     from core.utils import gen_unique_slug
+
     used: set = set()
     host_map = []
     objs = []
@@ -51,11 +52,7 @@ def bulk_create_emissions(items: list) -> list:
         objs.append(Emission(**d))
     created = Emission.objects.bulk_create(objs, batch_size=500)
     Through = Emission.hosts.through
-    m2m = [
-        Through(emission=em, artist=h)
-        for em, hosts in zip(created, host_map)
-        for h in hosts
-    ]
+    m2m = [Through(emission=em, artist=h) for em, hosts in zip(created, host_map) for h in hosts]
     if m2m:
         Through.objects.bulk_create(m2m, batch_size=500, ignore_conflicts=True)
     cache.delete(LIVE_KEY)

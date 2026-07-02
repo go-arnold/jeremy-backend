@@ -29,11 +29,7 @@ class EventViewSet(ModelViewSet):
     lookup_field = "slug"
 
     def get_queryset(self):
-        qs = (
-            Event.objects.select_related("city")
-            .prefetch_related("artists")
-            .order_by("date")
-        )
+        qs = Event.objects.select_related("city").prefetch_related("artists").order_by("date")
         city = self.request.query_params.get("city")
         if city:
             qs = qs.filter(city__slug=city)

@@ -1,6 +1,5 @@
 from cloudinary.models import CloudinaryField
 from django.db import models
-from django.utils.text import slugify
 
 
 class Emission(models.Model):
@@ -38,5 +37,6 @@ class Emission(models.Model):
     def save(self, *args, **kwargs):
         if not self.slug:
             from core.utils import make_slug
+
             self.slug = make_slug(self.title, Emission)
         super().save(*args, **kwargs)

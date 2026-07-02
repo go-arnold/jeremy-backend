@@ -13,9 +13,12 @@ class RadioProgram(models.Model):
         (STATUS_ENDED, "Ended"),
     ]
 
-    DAY_CHOICES = [(i, day) for i, day in enumerate(
-        ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    )]
+    DAY_CHOICES = [
+        (i, day)
+        for i, day in enumerate(
+            ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        )
+    ]
 
     title = models.CharField(max_length=200)
     slug = models.SlugField(max_length=220, unique=True)
@@ -39,16 +42,14 @@ class RadioProgram(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            from django.utils.text import slugify
             from core.utils import make_slug
+
             self.slug = make_slug(self.title, RadioProgram)
         super().save(*args, **kwargs)
 
 
 class RadioChat(models.Model):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="radio_chats"
-    )
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="radio_chats")
     message = models.TextField(max_length=500)
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False)

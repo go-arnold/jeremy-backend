@@ -25,9 +25,7 @@ class User(AbstractUser):
     is_verified = models.BooleanField(default=False)
     is_online = models.BooleanField(default=False)
     listen_count = models.PositiveIntegerField(default=0)
-    favorite_artists = models.ManyToManyField(
-        "artists.Artist", blank=True, related_name="favorited_by"
-    )
+    favorite_artists = models.ManyToManyField("artists.Artist", blank=True, related_name="favorited_by")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

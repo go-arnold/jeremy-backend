@@ -4,7 +4,9 @@ from .base import *  # noqa
 
 DEBUG = False
 
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="", cast=lambda v: [s.strip() for s in v.split(",")])
+ALLOWED_HOSTS = config(
+    "ALLOWED_HOSTS", default="", cast=lambda v: [s.strip() for s in v.split(",") if s.strip()]
+)
 
 # Security
 SECURE_BROWSER_XSS_FILTER = True

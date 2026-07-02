@@ -3,9 +3,10 @@ from celery import shared_task
 
 @shared_task(queue="default")
 def cleanup_old_chat() -> None:
-    """Delete chat messages older than 7 days."""
-    from django.utils import timezone
     from datetime import timedelta
+
+    from django.utils import timezone
+
     from .models import RadioChat
 
     cutoff = timezone.now() - timedelta(days=7)
@@ -16,6 +17,7 @@ def cleanup_old_chat() -> None:
 @shared_task(queue="default")
 def update_program_statuses() -> None:
     from django.utils import timezone
+
     from .models import RadioProgram
 
     now = timezone.now()

@@ -14,9 +14,7 @@ def api_client():
 
 @pytest.fixture
 def admin_user(db):
-    return User.objects.create_superuser(
-        email="admin@artdukivu.com", username="admin", password="pass"
-    )
+    return User.objects.create_superuser(email="admin@artdukivu.com", username="admin", password="pass")
 
 
 @pytest.fixture
@@ -48,9 +46,19 @@ def test_artist_detail(api_client, artist):
 
 
 @pytest.mark.django_db
-def test_artist_create_requires_admin(api_client, artist):
+def test_artist_create_requires_admin(api_client, artist, admin_user):
     url = reverse("artist-list")
     data = {"name": "New Artist", "city": "Goma"}
+
+    # Anonymous: DRF raises NotAuthenticated (401), not PermissionDenied (403),
+    # because JWTAuthentication is a challenge-capable authenticator.
+    response = api_client.post(url, data)
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    non_admin = User.objects.create_user(
+        email="regular@artdukivu.com", username="regular", password="pass12345"
+    )
+    api_client.force_authenticate(user=non_admin)
     response = api_client.post(url, data)
     assert response.status_code == status.HTTP_403_FORBIDDEN
 

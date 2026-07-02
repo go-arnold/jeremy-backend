@@ -17,26 +17,17 @@ from .serializers import (
     ListenHistorySerializer,
     UserAdminSerializer,
     UserBulkUpdateSerializer,
-    UserPublicSerializer,
     UserSerializer,
 )
 
 
 class GoogleLoginView(SocialLoginView):
-    """
-    POST /api/v1/auth/google/
-    Body: {"access_token": "<google_access_token>"}
-    Returns JWT access + refresh tokens on success.
-    """
     adapter_class = GoogleOAuth2Adapter
 
 
 class EmailConfirmRedirectView(View):
-    """
-    Safety-net: /accounts/confirm-email/<key>/
-    The AccountAdapter already puts the frontend URL directly in emails, but if
-    a browser ever lands on this backend URL we redirect it cleanly to the SPA.
-    """
+    # The AccountAdapter already puts the frontend URL directly in emails, but if
+    # a browser ever lands on this backend URL we redirect it cleanly to the SPA.
     def get(self, request, key):
         return redirect(f"{settings.FRONTEND_URL}/verify-email?key={key}")
 
@@ -59,8 +50,16 @@ class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMix
 
     def get_queryset(self):
         qs = User.objects.only(
-            "id", "email", "username", "handle", "bio", "role",
-            "is_active", "is_verified", "listen_count", "created_at",
+            "id",
+            "email",
+            "username",
+            "handle",
+            "bio",
+            "role",
+            "is_active",
+            "is_verified",
+            "listen_count",
+            "created_at",
         )
         if not self.request.user.is_staff:
             qs = qs.filter(pk=self.request.user.pk)
@@ -72,7 +71,13 @@ class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMix
         return UserSerializer
 
     def get_permissions(self):
-        if self.action in ("list",):
+        # Authoritative permission check per action. Do NOT rely on the
+        # `permission_classes` kwarg passed to `@action` below — that kwarg
+        # is only honored when the view is dispatched through a DRF router
+        # (SimpleRouter forwards each action's own kwargs into as_view()).
+        # These routes are wired via manual `path()` in user_urls.py, which
+        # bypasses that mechanism entirely, so it must be enforced here.
+        if self.action in ("list", "bulk_update", "bulk_delete"):
             return [permissions.IsAdminUser()]
         if self.action in ("retrieve", "update", "partial_update"):
             return [IsSelfOrAdmin()]
@@ -90,12 +95,14 @@ class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMix
         user = self.get_object()
         if request.method == "GET":
             from apps.artists.serializers import ArtistListSerializer
+
             return Response(ArtistListSerializer(services.get_user_favorites(user), many=True).data)
         artist_id = request.data.get("artist_id")
         if not artist_id:
             return Response({"detail": "artist_id required"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             from apps.artists.models import Artist
+
             artist = Artist.objects.get(pk=artist_id)
         except Artist.DoesNotExist:
             return Response({"detail": "Artist not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -107,18 +114,17 @@ class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMix
         qs = ListenHistory.objects.filter(user=user).order_by("-listened_at")[:50]
         return Response(ListenHistorySerializer(qs, many=True).data)
 
-    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    @action(detail=False, methods=["post"])
     def bulk_update(self, request):
         ser = UserBulkUpdateSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         count = services.bulk_update_users(ser.validated_data["items"])
         return Response({"updated": count})
 
-    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    @action(detail=False, methods=["post"])
     def bulk_delete(self, request):
         ser = BulkDeleteSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        # Prevent self-deletion
         ids = [i for i in ser.validated_data["ids"] if i != request.user.pk]
         count = services.bulk_delete_users(ids)
         return Response({"deleted": count})

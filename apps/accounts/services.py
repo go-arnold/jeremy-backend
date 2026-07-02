@@ -7,7 +7,6 @@ User = get_user_model()
 
 
 def toggle_favorite_artist(user: User, artist: Artist) -> dict:
-    """Add or remove an artist from user's favorites. Returns action taken."""
     favorites = user.favorite_artists
     if favorites.filter(pk=artist.pk).exists():
         favorites.remove(artist)

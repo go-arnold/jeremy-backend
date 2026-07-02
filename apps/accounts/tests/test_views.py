@@ -76,3 +76,36 @@ def test_user_list_admin_only(api_client, user, admin_user):
     api_client.force_authenticate(user=admin_user)
     response = api_client.get(url)
     assert response.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.django_db
+def test_bulk_update_rejects_non_admin(api_client, user):
+    """Regression: bulk_update is wired via manual path(), not a router, so
+    it must not fall back to the class-level IsAuthenticated permission."""
+    url = reverse("user_bulk_update")
+    api_client.force_authenticate(user=user)
+    response = api_client.post(
+        url, {"items": [{"id": user.id, "is_staff": True, "role": "admin"}]}, format="json"
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    user.refresh_from_db()
+    assert user.is_staff is False
+
+
+@pytest.mark.django_db
+def test_bulk_delete_rejects_non_admin(api_client, user, admin_user):
+    url = reverse("user_bulk_delete")
+    api_client.force_authenticate(user=user)
+    response = api_client.post(url, {"ids": [admin_user.id]}, format="json")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    assert User.objects.filter(pk=admin_user.pk).exists()
+
+
+@pytest.mark.django_db
+def test_bulk_update_allows_admin(api_client, user, admin_user):
+    url = reverse("user_bulk_update")
+    api_client.force_authenticate(user=admin_user)
+    response = api_client.post(url, {"items": [{"id": user.id, "is_verified": True}]}, format="json")
+    assert response.status_code == status.HTTP_200_OK
+    user.refresh_from_db()
+    assert user.is_verified is True
