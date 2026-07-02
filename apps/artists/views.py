@@ -2,6 +2,7 @@ from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -27,6 +28,7 @@ from .serializers import (
 )
 
 
+@extend_schema(tags=["Artists"])
 class ArtistViewSet(ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination

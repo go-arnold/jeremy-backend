@@ -1,6 +1,7 @@
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -21,6 +22,7 @@ from .serializers import (
 )
 
 
+@extend_schema(tags=["Radio"])
 class RadioProgramViewSet(ModelViewSet):
     queryset = RadioProgram.objects.all()
     permission_classes = [IsAdminOrReadOnly]
@@ -72,6 +74,7 @@ class RadioProgramViewSet(ModelViewSet):
         return Response({"deleted": count})
 
 
+@extend_schema(tags=["Radio"])
 class RadioChatViewSet(ModelViewSet):
     pagination_class = SmallPagination
     http_method_names = ["get", "post", "delete"]
@@ -97,6 +100,7 @@ class RadioChatViewSet(ModelViewSet):
         instance.save(update_fields=["is_deleted"])
 
 
+@extend_schema(tags=["Radio"])
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
 @method_decorator(cache_page(60))
