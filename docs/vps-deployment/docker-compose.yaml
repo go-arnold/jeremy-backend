@@ -119,6 +119,15 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    # Overrides the Dockerfile's HEALTHCHECK (a curl against the web server, which doesn't
+    # exist in this container — it would sit "unhealthy" forever otherwise) with an actual
+    # liveness check for a Celery worker.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A artdukivu inspect ping || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   beat:
     build:
@@ -137,6 +146,10 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    # Same rationale as `worker` above — beat has no HTTP server and no simple self-ping, so
+    # the inherited curl-based HEALTHCHECK is disabled rather than reporting a false negative.
+    healthcheck:
+      disable: true
 
 volumes:
   pg_data:
