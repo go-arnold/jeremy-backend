@@ -1,3 +1,4 @@
+from django.db.models import Count, Q
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action
@@ -8,6 +9,7 @@ from apps.engagement.mixins import EngagementActionsMixin
 from core.pagination import StandardPagination
 from core.permissions import IsOwnerOrAdmin
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import Challenge, CommunityPost, Poll
@@ -33,6 +35,11 @@ class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
         post_type = self.request.query_params.get("type")
         if post_type:
             qs = qs.filter(post_type=post_type)
+        # Annotated so CommunityPostSerializer.get_comment_count avoids running 4 separate
+        # engagement COUNT queries per post on every paginated list request.
+        qs = qs.annotate(
+            live_comment_count=Count("engagement_comments", filter=Q(engagement_comments__is_deleted=False))
+        )
         return qs.order_by("-created_at")
 
     def get_permissions(self):
@@ -40,7 +47,11 @@ class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
             return [permissions.IsAuthenticated()]
         if self.action == "destroy":
             return [IsOwnerOrAdmin()]
-        return [permissions.AllowAny()]
+        # Everything else (list/retrieve, and the engagement actions mounted by
+        # EngagementActionsMixin — like/comments/share/save/submit_talent) defers to
+        # whatever permission_classes each @action declared, instead of hardcoding
+        # AllowAny and silently discarding those declarations.
+        return super().get_permissions()
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -84,7 +95,7 @@ class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
 
 
 @extend_schema(tags=["Community"])
-class ChallengeViewSet(ModelViewSet):
+class ChallengeViewSet(UploadThrottleMixin, ModelViewSet):
     pagination_class = StandardPagination
     lookup_field = "slug"
 
@@ -97,7 +108,10 @@ class ChallengeViewSet(ModelViewSet):
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):
             return [permissions.IsAdminUser()]
-        return [permissions.AllowAny()]
+        # Defers to each @action's own permission_classes (bulk_create/update/delete are
+        # IsAdminUser, join is IsAuthenticated) instead of hardcoding AllowAny and silently
+        # discarding those declarations.
+        return super().get_permissions()
 
     def perform_create(self, serializer):
         serializer.instance = services.create_challenge(dict(serializer.validated_data))
@@ -132,6 +146,17 @@ class ChallengeViewSet(ModelViewSet):
         count = services.bulk_delete_challenges(ser.validated_data["ids"])
         return Response({"deleted": count})
 
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def join(self, request, slug=None):
+        challenge = self.get_object()
+        result = services.join_challenge(challenge, request.user)
+        if result.get("error") == "already_joined":
+            return Response(
+                {"detail": "Vous participez déjà à ce défi.", "code": "already_joined"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"detail": "Participation enregistrée."}, status=status.HTTP_201_CREATED)
+
 
 @extend_schema(tags=["Community"])
 class PollViewSet(ModelViewSet):
@@ -148,7 +173,10 @@ class PollViewSet(ModelViewSet):
     def get_permissions(self):
         if self.action in ("create", "update", "partial_update", "destroy"):
             return [permissions.IsAdminUser()]
-        return [permissions.AllowAny()]
+        # Defers to each @action's own permission_classes (bulk_delete is IsAdminUser, vote is
+        # IsAuthenticated) instead of hardcoding AllowAny and silently discarding those
+        # declarations — see the identical fix on CommunityPostViewSet/ChallengeViewSet above.
+        return super().get_permissions()
 
     def perform_create(self, serializer):
         poll = services.create_poll(dict(serializer.validated_data))

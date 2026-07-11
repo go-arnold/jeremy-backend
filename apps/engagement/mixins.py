@@ -40,6 +40,24 @@ class EngagementActionsMixin:
         )
         return Response(CommentSerializer(comment).data, status=status.HTTP_201_CREATED)
 
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"comments/(?P<comment_id>\d+)",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def delete_comment(self, request, comment_id=None, *args, **kwargs):
+        instance = self.get_object()
+        result = services.delete_comment(instance, comment_id, request.user)
+        if result is None:
+            return Response({"detail": "Commentaire introuvable."}, status=status.HTTP_404_NOT_FOUND)
+        if result is False:
+            return Response(
+                {"detail": "Vous ne pouvez supprimer que vos propres commentaires."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=True, methods=["post"], permission_classes=[permissions.AllowAny])
     def share(self, request, *args, **kwargs):
         instance = self.get_object()

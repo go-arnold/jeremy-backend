@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Challenge, CommunityPost, Poll, PollOption
+from .models import Challenge, ChallengeParticipant, CommunityPost, Poll, PollOption
 
 
 class PollOptionInline(admin.TabularInline):
@@ -19,6 +19,12 @@ class CommunityPostAdmin(admin.ModelAdmin):
 class ChallengeAdmin(admin.ModelAdmin):
     list_display = ("title", "deadline", "participant_count", "is_active")
     prepopulated_fields = {"slug": ("title",)}
+
+
+@admin.register(ChallengeParticipant)
+class ChallengeParticipantAdmin(admin.ModelAdmin):
+    list_display = ("challenge", "user", "joined_at")
+    raw_id_fields = ("challenge", "user")
 
 
 @admin.register(Poll)

@@ -20,7 +20,11 @@ def update_program_statuses() -> None:
 
     from .models import RadioProgram
 
-    now = timezone.now()
+    # RadioProgram.day_of_week/start_time/end_time are local-time values (TIME_ZONE =
+    # Africa/Lubumbashi); timezone.now() is UTC — comparing it directly is off by the UTC
+    # offset for part of every day (e.g. a program starting at local midnight would never
+    # flip to "live" between ~22:00-00:00 UTC).
+    now = timezone.localtime(timezone.now())
     current_day = now.weekday()
     current_time = now.time()
 

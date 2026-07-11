@@ -9,6 +9,7 @@ from rest_framework.viewsets import ModelViewSet
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import Article, Category, Comment, Tag
@@ -26,7 +27,7 @@ from .tasks import async_increment_view
 
 
 @extend_schema(tags=["Articles"])
-class ArticleViewSet(ModelViewSet):
+class ArticleViewSet(UploadThrottleMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "excerpt", "content"]
@@ -108,15 +109,13 @@ class ArticleViewSet(ModelViewSet):
         result = services.toggle_like(article, request.user)
         return Response(result)
 
-    @action(detail=True, methods=["get", "post"])
+    @action(detail=True, methods=["get", "post"], permission_classes=[permissions.IsAuthenticatedOrReadOnly])
     def comments(self, request, slug=None):
         article = self.get_object()
         if request.method == "GET":
             qs = Comment.objects.filter(article=article, parent=None).select_related("author")
             page = self.paginate_queryset(qs)
             return self.get_paginated_response(CommentSerializer(page, many=True).data)
-        if not request.user.is_authenticated:
-            return Response({"detail": "Authentification requise."}, status=status.HTTP_401_UNAUTHORIZED)
         comment = services.add_comment(
             article,
             request.user,

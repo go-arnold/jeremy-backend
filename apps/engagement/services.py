@@ -13,6 +13,13 @@ def is_currently_live(instance) -> bool:
 
 @transaction.atomic
 def toggle_like(instance, user) -> tuple[bool, int]:
+    # Locking the target row serializes concurrent toggle calls on the same content item so
+    # they can't both read the pre-toggle state before either commits (which previously could
+    # let two overlapping requests interleave unpredictably). This does not — and can't, without
+    # changing the API from a blind toggle to explicit like/unlike — prevent two genuinely
+    # duplicate toggle requests (double-click, client retry) from canceling each other out;
+    # that's an inherent property of a toggle endpoint, not a race condition per se.
+    type(instance).objects.select_for_update().get(pk=instance.pk)
     content_type = ContentType.objects.get_for_model(instance)
     like, created = Like.objects.get_or_create(content_type=content_type, object_id=instance.pk, user=user)
     if not created:
@@ -35,6 +42,23 @@ def add_comment(instance, author, content: str, parent_id: int | None = None) ->
         content=content,
         parent=parent,
     )
+
+
+def delete_comment(instance, comment_id: int, user):
+    """Soft-deletes a comment if `user` is its author or staff.
+
+    Returns None if no such comment exists for this instance, False if the requester isn't
+    allowed to delete it, True on success.
+    """
+    content_type = ContentType.objects.get_for_model(instance)
+    comment = Comment.objects.filter(pk=comment_id, content_type=content_type, object_id=instance.pk).first()
+    if not comment:
+        return None
+    if comment.author_id != user.id and not user.is_staff:
+        return False
+    comment.is_deleted = True
+    comment.save(update_fields=["is_deleted"])
+    return True
 
 
 def list_comments(instance):
@@ -64,6 +88,8 @@ class LiveContentNotSavableError(Exception):
 def toggle_save(instance, user) -> bool:
     if is_currently_live(instance):
         raise LiveContentNotSavableError("Le contenu en direct ne peut pas être enregistré pour plus tard.")
+    # See toggle_like's comment above — same rationale for locking the target row.
+    type(instance).objects.select_for_update().get(pk=instance.pk)
     content_type = ContentType.objects.get_for_model(instance)
     saved, created = SavedItem.objects.get_or_create(
         content_type=content_type, object_id=instance.pk, user=user

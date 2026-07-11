@@ -9,6 +9,7 @@ from rest_framework.viewsets import ModelViewSet
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import City, Event
@@ -23,7 +24,7 @@ from .serializers import (
 
 
 @extend_schema(tags=["Events"])
-class EventViewSet(ModelViewSet):
+class EventViewSet(UploadThrottleMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "description", "venue_name"]

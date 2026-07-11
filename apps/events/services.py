@@ -1,5 +1,6 @@
 from django.core.cache import cache
 from django.db import transaction
+from django.db.models import F
 
 from .models import Event, EventRegistration
 
@@ -39,12 +40,15 @@ def delete_event(event: Event) -> None:
 
 @transaction.atomic
 def register_for_event(event: Event, user) -> dict:
-    if event.max_capacity and event.current_registrations >= event.max_capacity:
+    # select_for_update locks the row so concurrent registrations for the same event serialize
+    # instead of racing on a capacity check + increment based on a stale in-memory value.
+    locked_event = Event.objects.select_for_update().get(pk=event.pk)
+    if locked_event.max_capacity and locked_event.current_registrations >= locked_event.max_capacity:
         return {"error": "full"}
-    _, created = EventRegistration.objects.get_or_create(event=event, user=user)
+    _, created = EventRegistration.objects.get_or_create(event=locked_event, user=user)
     if not created:
         return {"error": "already_registered"}
-    Event.objects.filter(pk=event.pk).update(current_registrations=event.current_registrations + 1)
+    Event.objects.filter(pk=locked_event.pk).update(current_registrations=F("current_registrations") + 1)
     return {"ok": True}
 
 

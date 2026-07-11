@@ -32,6 +32,13 @@ class CommunityPostSerializer(serializers.ModelSerializer):
         return None
 
     def get_comment_count(self, obj):
+        # Present whenever `obj` came from CommunityPostViewSet.get_queryset() (list/retrieve),
+        # which annotates it in a single query. Falls back to the 4-query helper only for
+        # instances built outside that queryset (e.g. the fresh object returned by
+        # submit_talent), where the annotation doesn't exist yet.
+        annotated = getattr(obj, "live_comment_count", None)
+        if annotated is not None:
+            return annotated
         return engagement_counts(obj)["comment_count"]
 
 

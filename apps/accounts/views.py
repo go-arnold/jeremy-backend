@@ -13,6 +13,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.permissions import IsSelfOrAdmin
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import ListenHistory, User
@@ -89,7 +90,7 @@ class MeView(generics.RetrieveUpdateAPIView):
 
 
 @extend_schema(tags=["Users"])
-class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMixin):
+class UserViewSet(UploadThrottleMixin, GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMixin):
     lookup_field = "id"
     permission_classes = [permissions.IsAuthenticated]
 

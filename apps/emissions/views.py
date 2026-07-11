@@ -1,5 +1,3 @@
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action
@@ -10,6 +8,7 @@ from apps.engagement.mixins import EngagementActionsMixin
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import Emission
@@ -23,7 +22,7 @@ from .serializers import (
 
 
 @extend_schema(tags=["Emissions"])
-class EmissionViewSet(EngagementActionsMixin, ModelViewSet):
+class EmissionViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "description"]
@@ -55,10 +54,9 @@ class EmissionViewSet(EngagementActionsMixin, ModelViewSet):
     def perform_destroy(self, instance):
         services.delete_emission(instance)
 
-    @method_decorator(cache_page(60))
     @action(detail=False, methods=["get"])
     def live(self, request):
-        emission = Emission.objects.filter(status=Emission.STATUS_LIVE).first()
+        emission = services.get_live_emission()
         if not emission:
             return Response(
                 {"detail": "Aucune émission en direct actuellement."}, status=status.HTTP_404_NOT_FOUND

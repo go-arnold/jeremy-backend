@@ -3,6 +3,16 @@
 # Exit immediately if a command exits with a non-zero status
 set -e
 
+# Force one explicit, shared settings module for every process this script starts (migrate,
+# collectstatic, search_index, Celery worker, Celery beat, Gunicorn). Without this, each of
+# those processes independently falls back to ITS OWN default when DJANGO_SETTINGS_MODULE
+# isn't set externally: artdukivu/asgi.py defaults to settings.production but
+# artdukivu/celery.py defaults to settings.local — if a deployment forgets to export the
+# variable, Gunicorn and Celery would silently run under different settings (DEBUG, email
+# backend, cache backend) in the same container. Respects an explicit external value if one
+# is already set.
+export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-settings.production}"
+
 echo "Running migrations..."
 python manage.py migrate --noinput
 

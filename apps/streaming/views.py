@@ -1,11 +1,17 @@
 import hashlib
 import hmac
+import time
 
 from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+
+# How much clock skew / delivery delay to tolerate before treating a webhook as stale. A
+# validly-signed payload is otherwise valid forever, letting a captured request be replayed at
+# any point in the future to flip a resource's live status on demand.
+WEBHOOK_MAX_AGE_SECONDS = 300
 
 
 def _verify_signature(raw_body: bytes, header_value: str) -> bool:
@@ -14,6 +20,11 @@ def _verify_signature(raw_body: bytes, header_value: str) -> bool:
     parts = dict(item.split("=", 1) for item in header_value.split(",") if "=" in item)
     ts, sig = parts.get("time"), parts.get("sig1")
     if not ts or not sig:
+        return False
+    try:
+        if abs(time.time() - int(ts)) > WEBHOOK_MAX_AGE_SECONDS:
+            return False
+    except ValueError:
         return False
     expected = hmac.new(
         settings.CLOUDFLARE_WEBHOOK_SECRET.encode(), f"{ts}.".encode() + raw_body, hashlib.sha256

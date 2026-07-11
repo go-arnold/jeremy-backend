@@ -2,6 +2,8 @@ from cloudinary.models import CloudinaryField
 from django.db import models
 from django.utils.text import slugify
 
+from apps.engagement.models import Engageable
+
 
 class PodcastSeries(models.Model):
     CATEGORY_CHOICES = [
@@ -36,7 +38,7 @@ class PodcastSeries(models.Model):
         super().save(*args, **kwargs)
 
 
-class PodcastEpisode(models.Model):
+class PodcastEpisode(Engageable):
     series = models.ForeignKey(PodcastSeries, on_delete=models.CASCADE, related_name="episodes")
     title = models.CharField(max_length=300, db_index=True)
     slug = models.SlugField(max_length=320, unique=True)

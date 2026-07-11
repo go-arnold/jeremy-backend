@@ -10,6 +10,7 @@ from apps.engagement.mixins import EngagementActionsMixin
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import PodcastEpisode, PodcastSeries
@@ -28,7 +29,7 @@ from .tasks import async_increment_play
 
 
 @extend_schema(tags=["Podcasts"])
-class PodcastSeriesViewSet(ModelViewSet):
+class PodcastSeriesViewSet(UploadThrottleMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "description"]
@@ -98,7 +99,7 @@ class PodcastSeriesViewSet(ModelViewSet):
 
 
 @extend_schema(tags=["Podcasts"])
-class PodcastEpisodeViewSet(EngagementActionsMixin, ModelViewSet):
+class PodcastEpisodeViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "description"]

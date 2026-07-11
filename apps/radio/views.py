@@ -11,6 +11,7 @@ from apps.realtime import presence
 from core.pagination import SmallPagination
 from core.permissions import IsAdminOrReadOnly, IsOwnerOrAdmin
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import RadioChat, RadioProgram
@@ -28,7 +29,7 @@ RADIO_ROOM_ID = "live"
 
 
 @extend_schema(tags=["Radio"])
-class RadioProgramViewSet(ModelViewSet):
+class RadioProgramViewSet(UploadThrottleMixin, ModelViewSet):
     queryset = RadioProgram.objects.all()
     permission_classes = [IsAdminOrReadOnly]
     lookup_field = "id"
@@ -132,7 +133,9 @@ class RadioChatViewSet(ModelViewSet):
 def current_program(request):
     # Not cache_page'd (unlike other list endpoints) — listener_count below is a live
     # presence read, so caching the response would freeze it for the cache TTL.
-    now = timezone.now()
+    # localtime() matters here: day_of_week/start_time/end_time are local values
+    # (Africa/Lubumbashi), while timezone.now() is UTC.
+    now = timezone.localtime(timezone.now())
     current_day = now.weekday()
     current_time = now.time()
 

@@ -1,5 +1,3 @@
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action
@@ -11,6 +9,7 @@ from apps.realtime.mixins import LiveChatViewSetMixin
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import WebTVVideo
@@ -25,7 +24,7 @@ from .tasks import async_increment_view
 
 
 @extend_schema(tags=["Web TV"])
-class WebTVVideoViewSet(EngagementActionsMixin, LiveChatViewSetMixin, ModelViewSet):
+class WebTVVideoViewSet(UploadThrottleMixin, EngagementActionsMixin, LiveChatViewSetMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "description"]
@@ -61,11 +60,9 @@ class WebTVVideoViewSet(EngagementActionsMixin, LiveChatViewSetMixin, ModelViewS
         async_increment_view.delay(instance.pk)
         return Response(VideoDetailSerializer(instance).data)
 
-    @method_decorator(cache_page(60 * 15))
     @action(detail=False, methods=["get"])
     def premiers(self, request):
-        qs = WebTVVideo.objects.filter(is_premier=True).order_by("-published_at")[:5]
-        return Response(VideoListSerializer(qs, many=True).data)
+        return Response(VideoListSerializer(services.get_premiers(), many=True).data)
 
     @action(detail=True, methods=["post"])
     def view(self, request, slug=None):

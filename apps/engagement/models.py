@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 
@@ -70,3 +70,23 @@ class SavedItem(models.Model):
         unique_together = ("content_type", "object_id", "user")
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["user", "-created_at"])]
+
+
+class Engageable(models.Model):
+    """Abstract mixin for any model that can be liked/commented/shared/saved.
+
+    Without these GenericRelation fields, Django has no way to know that a Like/Comment/Share/
+    SavedItem row is "related" to a given instance beyond the raw content_type/object_id pair —
+    deleting the instance would leave those rows permanently orphaned instead of cascading.
+    `related_query_name="+"` disables the reverse name (e.g. `Like.objects.filter(webtvvideo=...)`)
+    since every consumer of this mixin would otherwise need a distinct name; engagement lookups
+    always go through content_type/object_id in apps.engagement.services instead.
+    """
+
+    engagement_likes = GenericRelation(Like, related_query_name="+")
+    engagement_comments = GenericRelation(Comment, related_query_name="+")
+    engagement_shares = GenericRelation(Share, related_query_name="+")
+    engagement_saves = GenericRelation(SavedItem, related_query_name="+")
+
+    class Meta:
+        abstract = True

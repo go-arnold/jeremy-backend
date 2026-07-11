@@ -15,3 +15,14 @@ class AuthRateThrottle(AnonRateThrottle):
 
 class UploadRateThrottle(UserRateThrottle):
     scope = "upload"
+
+
+class UploadThrottleMixin:
+    """Adds the stricter `upload` throttle scope on top of the default ones for create/update
+    actions — for ViewSets whose write serializer accepts a CloudinaryField (image/audio/video).
+    """
+
+    def get_throttles(self):
+        if self.action in ("create", "update", "partial_update"):
+            return [UploadRateThrottle()] + super().get_throttles()
+        return super().get_throttles()
