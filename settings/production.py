@@ -24,6 +24,15 @@ SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
+# This app always sits behind a reverse proxy (nginx) that terminates TLS and forwards to
+# Gunicorn over plain HTTP — without this, Django can never tell the original request was
+# HTTPS, so SECURE_SSL_REDIRECT above would redirect every single request, including ones
+# that already arrived over HTTPS, producing an infinite redirect loop. Safe only because
+# Django is never reachable directly (bound to 127.0.0.1, nginx is the sole public entry
+# point) — nginx, not the client, is what sets X-Forwarded-Proto (see the reverse-proxy
+# configs under docs/docker-production/ and docs/vps-deployment/).
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 # Email
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")

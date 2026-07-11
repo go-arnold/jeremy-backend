@@ -3,3 +3,4 @@ venv/
 CLAUDE.md
 __pycache__/
 *.pyc
+.env.txt
