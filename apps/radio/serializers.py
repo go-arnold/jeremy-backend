@@ -22,6 +22,8 @@ class RadioProgramSerializer(serializers.ModelSerializer):
             "presenter",
             "status",
             "stream_url",
+            "cf_playback_hls_url",
+            "cf_playback_dash_url",
             "listener_count",
         ]
 

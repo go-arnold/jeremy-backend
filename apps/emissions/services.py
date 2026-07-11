@@ -1,9 +1,47 @@
 from django.core.cache import cache
 from django.db import transaction
 
+from apps.streaming import services as streaming_services
+
 from .models import Emission
 
 LIVE_KEY = "emissions:live"
+
+
+def get_live_emission():
+    # cache.delete(LIVE_KEY) calls throughout this file only invalidate something because this
+    # is the same key used to populate it — @cache_page (used by the view previously) stores
+    # under its own internal hashed key, unreachable via cache.delete(LIVE_KEY). The short TTL
+    # here also self-heals the case where apps.emissions.tasks.update_emission_statuses flips a
+    # status via a bulk .update() that bypasses this cache entirely.
+    cached = cache.get(LIVE_KEY)
+    if cached is not None:
+        return cached
+    emission = Emission.objects.filter(status=Emission.STATUS_LIVE).first()
+    if emission is not None:
+        cache.set(LIVE_KEY, emission, 60)
+    return emission
+
+
+@transaction.atomic
+def start_live(emission: Emission) -> Emission:
+    fields = streaming_services.start_live_input(emission.title, existing_uid=emission.cf_live_input_uid)
+    for attr, value in fields.items():
+        setattr(emission, attr, value)
+    emission.status = Emission.STATUS_LIVE
+    emission.save()
+    cache.delete(LIVE_KEY)
+    return emission
+
+
+@transaction.atomic
+def end_live(emission: Emission) -> Emission:
+    streaming_services.stop_live_input(emission.cf_live_input_uid)
+    emission.status = Emission.STATUS_RECORDED
+    emission.cf_live_input_uid = ""
+    emission.save()
+    cache.delete(LIVE_KEY)
+    return emission
 
 
 @transaction.atomic

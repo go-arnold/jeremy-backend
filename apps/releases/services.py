@@ -105,6 +105,38 @@ def bulk_delete_releases(ids: list) -> int:
     return deleted
 
 
+def get_featured_release():
+    # cache.delete(FEATURED_KEY) in _invalidate() only actually invalidates something because
+    # this key is set here too — @cache_page (used by the view previously) stores under its own
+    # internal hashed key, which cache.delete(FEATURED_KEY) can never reach.
+    cached = cache.get(FEATURED_KEY)
+    if cached is not None:
+        return cached
+    release = MusicRelease.objects.filter(is_featured=True).select_related("artist").first()
+    if release is not None:
+        cache.set(FEATURED_KEY, release, 60 * 30)
+    return release
+
+
+def get_upcoming_releases(days: int = 60) -> list:
+    cached = cache.get(CALENDAR_KEY)
+    if cached is not None:
+        return cached
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    today = timezone.now().date()
+    end = today + timedelta(days=days)
+    releases = list(
+        MusicRelease.objects.filter(release_date__gte=today, release_date__lte=end)
+        .select_related("artist")
+        .order_by("release_date")
+    )
+    cache.set(CALENDAR_KEY, releases, 60 * 60)
+    return releases
+
+
 def _invalidate() -> None:
     cache.delete(FEATURED_KEY)
     cache.delete(CALENDAR_KEY)

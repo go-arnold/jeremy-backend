@@ -1,8 +1,10 @@
 from cloudinary.models import CloudinaryField
 from django.db import models
 
+from apps.engagement.models import Engageable
 
-class MusicRelease(models.Model):
+
+class MusicRelease(Engageable):
     FORMAT_ALBUM = "album"
     FORMAT_SINGLE = "single"
     FORMAT_CLIP = "clip"

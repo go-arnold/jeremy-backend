@@ -4,6 +4,11 @@ from .base import *  # noqa
 
 DEBUG = False
 
+# base.py falls back to a known, publicly-visible insecure default so that local/dev settings
+# never need a real SECRET_KEY — production must not inherit that silently. Omitting the
+# `default=` here means decouple raises UndefinedValueError (fail fast at startup) instead.
+SECRET_KEY = config("SECRET_KEY")
+
 ALLOWED_HOSTS = config(
     "ALLOWED_HOSTS", default="", cast=lambda v: [s.strip() for s in v.split(",") if s.strip()]
 )

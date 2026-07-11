@@ -1,7 +1,7 @@
 from django.db import IntegrityError, transaction
 from django.db.models import F
 
-from .models import Challenge, CommunityPost, Poll, PollOption, PollVote, PostLike
+from .models import Challenge, ChallengeParticipant, CommunityPost, Poll, PollOption, PollVote, PostLike
 
 
 @transaction.atomic
@@ -23,6 +23,15 @@ def toggle_post_like(post: CommunityPost, user) -> dict:
         return {"action": "unliked"}
     CommunityPost.objects.filter(pk=post.pk).update(like_count=F("like_count") + 1)
     return {"action": "liked"}
+
+
+@transaction.atomic
+def join_challenge(challenge: Challenge, user) -> dict:
+    _, created = ChallengeParticipant.objects.get_or_create(challenge=challenge, user=user)
+    if not created:
+        return {"error": "already_joined"}
+    Challenge.objects.filter(pk=challenge.pk).update(participant_count=F("participant_count") + 1)
+    return {"ok": True}
 
 
 @transaction.atomic

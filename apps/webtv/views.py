@@ -1,14 +1,15 @@
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.engagement.mixins import EngagementActionsMixin
+from apps.realtime.mixins import LiveChatViewSetMixin
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import WebTVVideo
@@ -23,12 +24,13 @@ from .tasks import async_increment_view
 
 
 @extend_schema(tags=["Web TV"])
-class WebTVVideoViewSet(ModelViewSet):
+class WebTVVideoViewSet(UploadThrottleMixin, EngagementActionsMixin, LiveChatViewSetMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "description"]
     ordering_fields = ["published_at", "view_count"]
     lookup_field = "slug"
+    chat_room_type = "webtv"
 
     def get_queryset(self):
         qs = WebTVVideo.objects.prefetch_related("artists")
@@ -58,17 +60,41 @@ class WebTVVideoViewSet(ModelViewSet):
         async_increment_view.delay(instance.pk)
         return Response(VideoDetailSerializer(instance).data)
 
-    @method_decorator(cache_page(60 * 15))
     @action(detail=False, methods=["get"])
     def premiers(self, request):
-        qs = WebTVVideo.objects.filter(is_premier=True).order_by("-published_at")[:5]
-        return Response(VideoListSerializer(qs, many=True).data)
+        return Response(VideoListSerializer(services.get_premiers(), many=True).data)
 
     @action(detail=True, methods=["post"])
     def view(self, request, slug=None):
         video = self.get_object()
         async_increment_view.delay(video.pk)
-        return Response({"detail": "View counted."})
+        return Response({"detail": "Vue comptabilisée."})
+
+    @action(detail=False, methods=["get"])
+    def live(self, request):
+        video = WebTVVideo.objects.filter(is_live=True).first()
+        if not video:
+            return Response(
+                {"detail": "Aucune vidéo en direct actuellement."}, status=status.HTTP_404_NOT_FOUND
+            )
+        return Response(VideoDetailSerializer(video).data)
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def go_live(self, request, slug=None):
+        video = services.start_live(self.get_object())
+        return Response(
+            {
+                "is_live": video.is_live,
+                "cf_rtmps_url": video.cf_rtmps_url,
+                "cf_rtmps_key": video.cf_rtmps_key,
+                "cf_playback_hls_url": video.cf_playback_hls_url,
+            }
+        )
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def end_live(self, request, slug=None):
+        video = services.end_live(self.get_object())
+        return Response({"is_live": video.is_live})
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def bulk_create(self, request):

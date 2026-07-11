@@ -1,0 +1,118 @@
+# Production stack for the Art du Kivu backend — self-hosted (Option B in ../PRODUCTION.md).
+#
+# PostgreSQL and Redis are treated as external managed services (matching the rest of this
+# project, which already runs on Supabase + Aiven) and are NOT included as containers here.
+# Set DB_HOST/DB_PORT/REDIS_URL in the .env file this stack reads (see `env_file:` below) to
+# point at your managed instances. To run fully self-hosted instead, add `postgres:16` and
+# `redis:7` services and update those variables accordingly.
+#
+# Usage (from this directory):
+#   docker compose up -d --build
+#
+# Or via the automation script (recommended — see ../deploy.sh and ../DEPLOY.md):
+#   ../deploy.sh docker-production
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.0.2
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    # Single-node and unsecured, but never published to the host (no top-level "ports:") — only
+    # reachable from other containers on this stack's network. Point ELASTICSEARCH_URL at a
+    # managed cluster instead if you need HA/multi-node.
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  api:
+    build:
+      context: ../..
+      dockerfile: docs/docker-production/Dockerfile
+    restart: unless-stopped
+    # Overrides the image's entrypoint.sh on purpose: entrypoint.sh also launches a Celery
+    # worker and beat in-process, which would duplicate the dedicated `worker`/`beat` services
+    # below. -k uvicorn.workers.UvicornWorker is required for the WebSocket chat/presence
+    # features (apps.realtime) — plain WSGI cannot handle the Upgrade handshake.
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             (python manage.py search_index --create -f || echo 'Could not create search indices — continuing without search.') &&
+             gunicorn artdukivu.asgi:application --bind 0.0.0.0:8000 -k uvicorn.workers.UvicornWorker --workers 4 --timeout 120 --access-logfile -"
+    env_file: ../../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: settings.production
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    expose:
+      - "8000"
+    volumes:
+      - static_files:/app/staticfiles
+      - media_files:/app/mediafiles
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: docs/docker-production/Dockerfile
+    restart: unless-stopped
+    command: celery -A artdukivu worker -l info -Q default,high_priority -c 4
+    env_file: ../../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: settings.production
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    depends_on:
+      api:
+        condition: service_healthy
+
+  beat:
+    build:
+      context: ../..
+      dockerfile: docs/docker-production/Dockerfile
+    restart: unless-stopped
+    command: >
+      celery -A artdukivu beat -l info
+        --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    env_file: ../../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: settings.production
+    depends_on:
+      api:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      # Uncomment once a TLS certificate is mounted — see the commented HTTPS server block
+      # at the bottom of nginx.conf:
+      # - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_files:/app/staticfiles:ro
+      - media_files:/app/mediafiles:ro
+      # - ./certbot/conf:/etc/letsencrypt:ro
+      # - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  static_files:
+  media_files:
+  es_data:

@@ -1,9 +1,42 @@
 from django.core.cache import cache
 from django.db import transaction
 
+from apps.streaming import services as streaming_services
+
 from .models import WebTVVideo
 
 PREMIERS_KEY = "webtv:premiers"
+
+
+def get_premiers(limit: int = 5) -> list:
+    # cache.delete(PREMIERS_KEY) below only invalidates something because this is the same key
+    # used to populate it — @cache_page (used by the view previously) stores under its own
+    # internal hashed key, unreachable via cache.delete(PREMIERS_KEY).
+    cached = cache.get(PREMIERS_KEY)
+    if cached is not None:
+        return cached
+    videos = list(WebTVVideo.objects.filter(is_premier=True).order_by("-published_at")[:limit])
+    cache.set(PREMIERS_KEY, videos, 60 * 15)
+    return videos
+
+
+@transaction.atomic
+def start_live(video: WebTVVideo) -> WebTVVideo:
+    fields = streaming_services.start_live_input(video.title, existing_uid=video.cf_live_input_uid)
+    for attr, value in fields.items():
+        setattr(video, attr, value)
+    video.is_live = True
+    video.save()
+    return video
+
+
+@transaction.atomic
+def end_live(video: WebTVVideo) -> WebTVVideo:
+    streaming_services.stop_live_input(video.cf_live_input_uid)
+    video.is_live = False
+    video.cf_live_input_uid = ""
+    video.save()
+    return video
 
 
 @transaction.atomic

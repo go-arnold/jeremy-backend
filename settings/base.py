@@ -14,7 +14,11 @@ DEBUG = False
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
 
 # ── Applications ──────────────────────────────────────────────────────────────
+# `daphne` must be first: it's how Channels makes `manage.py runserver` handle
+# WebSocket upgrades locally (production instead runs gunicorn with a uvicorn
+# worker directly against artdukivu.asgi:application — see entrypoint.sh).
 DJANGO_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -25,6 +29,7 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "channels",
     "rest_framework",
     "rest_framework.authtoken",
     "rest_framework_simplejwt",
@@ -41,6 +46,7 @@ THIRD_PARTY_APPS = [
     "django_filters",
     "drf_spectacular",
     "django_celery_beat",
+    "django_elasticsearch_dsl",
 ]
 
 LOCAL_APPS = [
@@ -54,6 +60,14 @@ LOCAL_APPS = [
     "apps.community",
     "apps.releases",
     "apps.emissions",
+    "apps.analytics",
+    "apps.newsletter",
+    "apps.search",
+    "apps.engagement",
+    "apps.realtime",
+    "apps.streaming",
+    "apps.live_music",
+    "apps.home",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -174,6 +188,47 @@ CACHES = {
     }
 }
 
+# ── Channels (WebSocket chat + presence) ─────────────────────────────────────
+_channel_layer_config = {"hosts": [REDIS_URL]}
+if REDIS_URL.startswith("rediss://"):
+    _channel_layer_config = {"hosts": [{"address": REDIS_URL, "ssl_cert_reqs": None}]}
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": _channel_layer_config,
+    }
+}
+
+# ── Cloudflare Stream (live ingest/playback) ─────────────────────────────────
+CLOUDFLARE_ACCOUNT_ID = config("CLOUDFLARE_ACCOUNT_ID", default="")
+CLOUDFLARE_API_TOKEN = config("CLOUDFLARE_API_TOKEN", default="")
+CLOUDFLARE_CUSTOMER_HOSTNAME = config("CLOUDFLARE_CUSTOMER_HOSTNAME", default="")
+CLOUDFLARE_WEBHOOK_SECRET = config("CLOUDFLARE_WEBHOOK_SECRET", default="")
+
+# ── Elasticsearch ─────────────────────────────────────────────────────────────
+# Point at a managed cluster (Elastic Cloud, AWS OpenSearch, ...) in production
+# by overriding ELASTICSEARCH_URL — the local docker-compose service is single-node
+# and unsecured, meant for local/staging only.
+ELASTICSEARCH_DSL = {
+    "default": {
+        "hosts": config("ELASTICSEARCH_URL", default="http://localhost:9200"),
+    }
+}
+# django_elasticsearch_dsl's RealTimeSignalProcessor/CelerySignalProcessor
+# both connect to Django's post_save/post_delete GLOBALLY (every model in the
+# project, not just indexed ones) with no sender filter. CelerySignalProcessor
+# additionally calls Task.delay() unconditionally inside that handler, before
+# any "is this model even indexed" check — confirmed with a live test: a
+# fresh test-DB migration (which saves unrelated models like Site/ContentType
+# via post_migrate) tried to publish to the Celery broker and blew up on a
+# refused connection. Disable it entirely and resync via our own scheduled
+# task (apps.search.tasks.resync_search_index) instead — search freshness
+# lags by one beat interval, an acceptable trade for never letting
+# Elasticsearch sit in the critical path of an unrelated DB write.
+ELASTICSEARCH_DSL_SIGNAL_PROCESSOR = "django_elasticsearch_dsl.signals.BaseSignalProcessor"
+ELASTICSEARCH_DSL_AUTOSYNC = False
+
 SESSION_ENGINE = "django.contrib.sessions.backends.cache"
 SESSION_CACHE_ALIAS = "default"
 
@@ -205,6 +260,10 @@ CELERY_BEAT_SCHEDULE = {
     "update-emission-statuses": {
         "task": "apps.emissions.tasks.update_emission_statuses",
         "schedule": 3600,
+    },
+    "resync-search-index": {
+        "task": "apps.search.tasks.resync_search_index",
+        "schedule": 300,
     },
 }
 
@@ -239,7 +298,7 @@ REST_FRAMEWORK = {
 
 # ── SimpleJWT ─────────────────────────────────────────────────────────────────
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
@@ -325,7 +384,12 @@ SPECTACULAR_SETTINGS = {
         {"name": "Community", "description": "Talent posts, challenges, polls"},
         {"name": "Releases", "description": "Music releases and premieres"},
         {"name": "Emissions", "description": "Scheduled live broadcast shows"},
+        {"name": "Analytics", "description": "Site-wide aggregate statistics dashboard"},
+        {"name": "Newsletter", "description": "Subscribe/unsubscribe and admin campaign sending"},
+        {"name": "Search", "description": "Unified full-text search across all content types"},
         {"name": "Home", "description": "Aggregated homepage payload"},
+        {"name": "Streaming", "description": "Cloudflare Stream live ingest control and webhooks"},
+        {"name": "Live Music", "description": "Live music session, schedule grid and live chat"},
     ],
 }
 

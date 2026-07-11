@@ -1,11 +1,14 @@
 from rest_framework import serializers
 
+from apps.engagement.services import engagement_counts
+
 from .models import Challenge, CommunityPost, Poll, PollOption
 
 
 class CommunityPostSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source="author.username", read_only=True)
     author_avatar = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = CommunityPost
@@ -13,6 +16,7 @@ class CommunityPostSerializer(serializers.ModelSerializer):
             "id",
             "author_name",
             "author_avatar",
+            "title",
             "content",
             "media",
             "post_type",
@@ -27,6 +31,16 @@ class CommunityPostSerializer(serializers.ModelSerializer):
             return obj.author.avatar.url
         return None
 
+    def get_comment_count(self, obj):
+        # Present whenever `obj` came from CommunityPostViewSet.get_queryset() (list/retrieve),
+        # which annotates it in a single query. Falls back to the 4-query helper only for
+        # instances built outside that queryset (e.g. the fresh object returned by
+        # submit_talent), where the annotation doesn't exist yet.
+        annotated = getattr(obj, "live_comment_count", None)
+        if annotated is not None:
+            return annotated
+        return engagement_counts(obj)["comment_count"]
+
 
 class CommunityPostWriteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -35,7 +49,21 @@ class CommunityPostWriteSerializer(serializers.ModelSerializer):
 
     def validate_media(self, value):
         if len(value) > 10:
-            raise serializers.ValidationError("Maximum 10 media items per post.")
+            raise serializers.ValidationError("Maximum 10 médias par publication.")
+        return value
+
+
+class TalentSubmissionSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=200)
+    media = serializers.ListField(child=serializers.JSONField(), min_length=1, max_length=10)
+
+    def validate_media(self, value):
+        allowed = {"song", "video"}
+        for item in value:
+            if not isinstance(item, dict) or item.get("type") not in allowed:
+                raise serializers.ValidationError(
+                    "Chaque média doit être une chanson ou une vidéo (type: 'song' | 'video')."
+                )
         return value
 
 
@@ -113,7 +141,7 @@ class PollWriteSerializer(serializers.ModelSerializer):
 
     def validate_options(self, value):
         if len(value) < 2:
-            raise serializers.ValidationError("A poll must have at least 2 options.")
+            raise serializers.ValidationError("Un sondage doit avoir au moins 2 options.")
         if len(value) > 20:
-            raise serializers.ValidationError("A poll cannot have more than 20 options.")
+            raise serializers.ValidationError("Un sondage ne peut pas avoir plus de 20 options.")
         return value

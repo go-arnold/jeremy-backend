@@ -37,6 +37,8 @@ class EmissionDetailSerializer(serializers.ModelSerializer):
             "description",
             "cover_url",
             "stream_url",
+            "cf_playback_hls_url",
+            "cf_playback_dash_url",
             "status",
             "scheduled_at",
             "duration_minutes",

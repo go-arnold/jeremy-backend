@@ -1,13 +1,12 @@
 from celery import shared_task
+from django.db.models import F
 
 
 @shared_task(queue="default")
 def async_increment_play(episode_id: int) -> None:
     from .models import PodcastEpisode
 
-    PodcastEpisode.objects.filter(pk=episode_id).update(
-        play_count=PodcastEpisode.objects.values_list("play_count", flat=True).get(pk=episode_id) + 1
-    )
+    PodcastEpisode.objects.filter(pk=episode_id).update(play_count=F("play_count") + 1)
 
 
 @shared_task(queue="default")

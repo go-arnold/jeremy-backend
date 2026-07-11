@@ -9,9 +9,10 @@ from rest_framework.viewsets import ModelViewSet
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
-from .models import Article, Category, Comment
+from .models import Article, Category, Comment, Tag
 from .serializers import (
     ArticleBulkCreateSerializer,
     ArticleBulkUpdateSerializer,
@@ -20,12 +21,13 @@ from .serializers import (
     ArticleWriteSerializer,
     CategorySerializer,
     CommentSerializer,
+    TagSerializer,
 )
 from .tasks import async_increment_view
 
 
 @extend_schema(tags=["Articles"])
-class ArticleViewSet(ModelViewSet):
+class ArticleViewSet(UploadThrottleMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "excerpt", "content"]
@@ -80,10 +82,17 @@ class ArticleViewSet(ModelViewSet):
         return Response(serializer.data)
 
     def perform_create(self, serializer):
-        serializer.instance = services.create_article(dict(serializer.validated_data), self.request.user)
+        data = dict(serializer.validated_data)
+        requested_author = data.pop("author", None)
+        author = requested_author if requested_author and self.request.user.is_staff else self.request.user
+        serializer.instance = services.create_article(data, author)
 
     def perform_update(self, serializer):
-        serializer.instance = services.update_article(serializer.instance, dict(serializer.validated_data))
+        data = dict(serializer.validated_data)
+        requested_author = data.pop("author", None)
+        if requested_author and self.request.user.is_staff:
+            data["author"] = requested_author
+        serializer.instance = services.update_article(serializer.instance, data)
 
     def perform_destroy(self, instance):
         services.delete_article(instance)
@@ -100,15 +109,13 @@ class ArticleViewSet(ModelViewSet):
         result = services.toggle_like(article, request.user)
         return Response(result)
 
-    @action(detail=True, methods=["get", "post"])
+    @action(detail=True, methods=["get", "post"], permission_classes=[permissions.IsAuthenticatedOrReadOnly])
     def comments(self, request, slug=None):
         article = self.get_object()
         if request.method == "GET":
             qs = Comment.objects.filter(article=article, parent=None).select_related("author")
             page = self.paginate_queryset(qs)
             return self.get_paginated_response(CommentSerializer(page, many=True).data)
-        if not request.user.is_authenticated:
-            return Response({"detail": "Authentication required"}, status=status.HTTP_401_UNAUTHORIZED)
         comment = services.add_comment(
             article,
             request.user,
@@ -140,3 +147,14 @@ class ArticleViewSet(ModelViewSet):
         ser.is_valid(raise_exception=True)
         count = services.bulk_delete_articles(ser.validated_data["ids"])
         return Response({"deleted": count})
+
+
+@extend_schema(tags=["Articles"])
+@method_decorator(cache_page(60 * 60), name="list")
+class TagViewSet(ModelViewSet):
+    queryset = Tag.objects.all().order_by("name")
+    serializer_class = TagSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    pagination_class = StandardPagination
+    search_fields = ["name"]
+    lookup_field = "slug"

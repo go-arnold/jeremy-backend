@@ -13,6 +13,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from core.permissions import IsSelfOrAdmin
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import ListenHistory, User
@@ -89,7 +90,7 @@ class MeView(generics.RetrieveUpdateAPIView):
 
 
 @extend_schema(tags=["Users"])
-class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMixin):
+class UserViewSet(UploadThrottleMixin, GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMixin):
     lookup_field = "id"
     permission_classes = [permissions.IsAuthenticated]
 
@@ -144,13 +145,13 @@ class UserViewSet(GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMix
             return Response(ArtistListSerializer(services.get_user_favorites(user), many=True).data)
         artist_id = request.data.get("artist_id")
         if not artist_id:
-            return Response({"detail": "artist_id required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "artist_id est requis."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             from apps.artists.models import Artist
 
             artist = Artist.objects.get(pk=artist_id)
         except Artist.DoesNotExist:
-            return Response({"detail": "Artist not found"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Artiste introuvable."}, status=status.HTTP_404_NOT_FOUND)
         return Response(services.toggle_favorite_artist(user, artist))
 
     @action(detail=True, methods=["get"], url_path="history")

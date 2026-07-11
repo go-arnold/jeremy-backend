@@ -1,9 +1,32 @@
 from django.core.cache import cache
 from django.db import transaction
 
+from apps.streaming import services as streaming_services
+
 from .models import RadioProgram
 
 CURRENT_KEY = "radio:current"
+
+
+@transaction.atomic
+def start_live(program: RadioProgram) -> RadioProgram:
+    fields = streaming_services.start_live_input(program.title, existing_uid=program.cf_live_input_uid)
+    for attr, value in fields.items():
+        setattr(program, attr, value)
+    program.status = RadioProgram.STATUS_LIVE
+    program.save()
+    cache.delete(CURRENT_KEY)
+    return program
+
+
+@transaction.atomic
+def end_live(program: RadioProgram) -> RadioProgram:
+    streaming_services.stop_live_input(program.cf_live_input_uid)
+    program.status = RadioProgram.STATUS_ENDED
+    program.cf_live_input_uid = ""
+    program.save()
+    cache.delete(CURRENT_KEY)
+    return program
 
 
 @transaction.atomic

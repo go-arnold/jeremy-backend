@@ -2,8 +2,10 @@ from cloudinary.models import CloudinaryField
 from django.conf import settings
 from django.db import models
 
+from apps.engagement.models import Engageable
 
-class CommunityPost(models.Model):
+
+class CommunityPost(Engageable):
     TYPE_TALENT = "talent"
     TYPE_ART = "art"
     TYPE_NEWS = "news"
@@ -16,6 +18,7 @@ class CommunityPost(models.Model):
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="community_posts"
     )
+    title = models.CharField(max_length=200, blank=True)
     content = models.TextField(max_length=2000)
     media = models.JSONField(default=list, blank=True)
     post_type = models.CharField(max_length=20, choices=TYPE_CHOICES, db_index=True)
@@ -62,6 +65,15 @@ class Challenge(models.Model):
 
             self.slug = make_slug(self.title, Challenge)
         super().save(*args, **kwargs)
+
+
+class ChallengeParticipant(models.Model):
+    challenge = models.ForeignKey(Challenge, on_delete=models.CASCADE, related_name="participants")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("challenge", "user")
 
 
 class Poll(models.Model):

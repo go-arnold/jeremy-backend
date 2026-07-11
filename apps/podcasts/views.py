@@ -6,9 +6,11 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.engagement.mixins import EngagementActionsMixin
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import PodcastEpisode, PodcastSeries
@@ -27,7 +29,7 @@ from .tasks import async_increment_play
 
 
 @extend_schema(tags=["Podcasts"])
-class PodcastSeriesViewSet(ModelViewSet):
+class PodcastSeriesViewSet(UploadThrottleMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "description"]
@@ -97,7 +99,7 @@ class PodcastSeriesViewSet(ModelViewSet):
 
 
 @extend_schema(tags=["Podcasts"])
-class PodcastEpisodeViewSet(ModelViewSet):
+class PodcastEpisodeViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "description"]
@@ -136,7 +138,7 @@ class PodcastEpisodeViewSet(ModelViewSet):
     def play(self, request, slug=None):
         episode = self.get_object()
         async_increment_play.delay(episode.pk)
-        return Response({"detail": "Play count updated."})
+        return Response({"detail": "Nombre d'écoutes mis à jour."})
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def bulk_create(self, request):

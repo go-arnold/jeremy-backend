@@ -1,14 +1,14 @@
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.engagement.mixins import EngagementActionsMixin
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
+from core.throttling import UploadThrottleMixin
 
 from . import services
 from .models import MusicRelease
@@ -22,7 +22,7 @@ from .serializers import (
 
 
 @extend_schema(tags=["Releases"])
-class ReleaseViewSet(ModelViewSet):
+class ReleaseViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "artist__name"]
@@ -55,12 +55,11 @@ class ReleaseViewSet(ModelViewSet):
     def perform_destroy(self, instance):
         services.delete_release(instance)
 
-    @method_decorator(cache_page(60 * 30))
     @action(detail=False, methods=["get"])
     def featured(self, request):
-        release = MusicRelease.objects.filter(is_featured=True).select_related("artist").first()
+        release = services.get_featured_release()
         if not release:
-            return Response({"detail": "No featured release"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Aucune sortie à la une."}, status=status.HTTP_404_NOT_FOUND)
         return Response(ReleaseDetailSerializer(release).data)
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
@@ -87,18 +86,7 @@ class ReleaseViewSet(ModelViewSet):
         count = services.bulk_delete_releases(ser.validated_data["ids"])
         return Response({"deleted": count})
 
-    @method_decorator(cache_page(60 * 60))
     @action(detail=False, methods=["get"])
     def calendar(self, request):
-        from datetime import timedelta
-
-        from django.utils import timezone
-
-        today = timezone.now().date()
-        end = today + timedelta(days=60)
-        releases = (
-            MusicRelease.objects.filter(release_date__gte=today, release_date__lte=end)
-            .select_related("artist")
-            .order_by("release_date")
-        )
+        releases = services.get_upcoming_releases()
         return Response(ReleaseListSerializer(releases, many=True).data)
