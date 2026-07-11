@@ -1,0 +1,144 @@
+# Self-hosted production stack for art-du-kivu-api.kelor.tech — SHARES a VPS with other
+# existing services (notably icarm-api, running natively via systemd + the host's nginx).
+# See docs/vps-deployment/RUNBOOK.md for the full step-by-step deployment procedure.
+#
+# Design constraints specific to this VPS:
+#   - The host's nginx (already serving icarm-api-drf.kelor.tech) stays the ONLY thing bound
+#     to 80/443 — this stack does NOT run its own nginx container.
+#   - postgres/redis/elasticsearch publish NO ports to the host at all — reachable only from
+#     other containers on this compose stack's private network.
+#   - The api service publishes its port bound to 127.0.0.1 ONLY, never 0.0.0.0. This host has
+#     no firewall active (ufw is disabled) — binding to loopback, not a firewall rule, is what
+#     actually keeps this port unreachable from the public internet.
+#
+# Usage (from this directory): docker compose up -d --build
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.0.2
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      # Conservative heap: this VPS has 7.8G total RAM shared with icarm-api and the rest of
+      # this stack (Postgres, Redis, Django, Celery). Raise only if you've confirmed headroom
+      # with `free -h`.
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  api:
+    build:
+      context: ../..
+      dockerfile: docs/docker-production/Dockerfile
+    restart: unless-stopped
+    # Overrides the image's entrypoint.sh on purpose: entrypoint.sh also launches a Celery
+    # worker and beat in-process, which would duplicate the dedicated worker/beat services
+    # below. -k uvicorn.workers.UvicornWorker is required for the WebSocket chat/presence
+    # features (apps.realtime) — plain WSGI cannot handle the Upgrade handshake.
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             (python manage.py search_index --create -f || echo 'Could not create search indices — continuing without search.') &&
+             gunicorn artdukivu.asgi:application --bind 0.0.0.0:8000 -k uvicorn.workers.UvicornWorker --workers 4 --timeout 120 --access-logfile -"
+    env_file: ../../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: settings.production
+      # These three override whatever the shared .env file says (which may still point at the
+      # old external Supabase/Aiven values) — this stack's Postgres/Redis/Elasticsearch are
+      # reachable by their Docker Compose service name, never by an external host.
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    ports:
+      - "127.0.0.1:8010:8000"
+    volumes:
+      - ../../staticfiles:/app/staticfiles
+      - ../../mediafiles:/app/mediafiles
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: docs/docker-production/Dockerfile
+    restart: unless-stopped
+    command: celery -A artdukivu worker -l info -Q default,high_priority -c 2
+    env_file: ../../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: settings.production
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    depends_on:
+      api:
+        condition: service_healthy
+
+  beat:
+    build:
+      context: ../..
+      dockerfile: docs/docker-production/Dockerfile
+    restart: unless-stopped
+    command: >
+      celery -A artdukivu beat -l info
+        --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    env_file: ../../.env
+    environment:
+      DJANGO_SETTINGS_MODULE: settings.production
+      DB_HOST: db
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pg_data:
+  redis_data:
+  es_data:
