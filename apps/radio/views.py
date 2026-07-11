@@ -1,18 +1,21 @@
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.utils import timezone
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.realtime import presence
 from core.pagination import SmallPagination
 from core.permissions import IsAdminOrReadOnly, IsOwnerOrAdmin
 from core.serializers import BulkDeleteSerializer
 
 from . import services
 from .models import RadioChat, RadioProgram
+
+# Radio is one continuous channel (not per-program) — presence/chat all share this room id.
 from .serializers import (
     RadioChatSerializer,
     RadioProgramBulkCreateSerializer,
@@ -20,6 +23,8 @@ from .serializers import (
     RadioProgramSerializer,
     RadioProgramWriteSerializer,
 )
+
+RADIO_ROOM_ID = "live"
 
 
 @extend_schema(tags=["Radio"])
@@ -48,6 +53,23 @@ class RadioProgramViewSet(ModelViewSet):
 
     def perform_destroy(self, instance):
         services.delete_program(instance)
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def go_live(self, request, id=None):
+        program = services.start_live(self.get_object())
+        return Response(
+            {
+                "status": program.status,
+                "cf_rtmps_url": program.cf_rtmps_url,
+                "cf_rtmps_key": program.cf_rtmps_key,
+                "cf_playback_hls_url": program.cf_playback_hls_url,
+            }
+        )
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def end_live(self, request, id=None):
+        program = services.end_live(self.get_object())
+        return Response({"status": program.status})
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def bulk_create(self, request):
@@ -93,7 +115,11 @@ class RadioChatViewSet(ModelViewSet):
         return [permissions.AllowAny()]
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        chat = serializer.save(user=self.request.user)
+        async_to_sync(get_channel_layer().group_send)(
+            f"live.radio.{RADIO_ROOM_ID}",
+            {"type": "chat.message", "message": self.get_serializer(chat).data},
+        )
 
     def perform_destroy(self, instance):
         instance.is_deleted = True
@@ -103,8 +129,9 @@ class RadioChatViewSet(ModelViewSet):
 @extend_schema(tags=["Radio"])
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
-@method_decorator(cache_page(60))
 def current_program(request):
+    # Not cache_page'd (unlike other list endpoints) — listener_count below is a live
+    # presence read, so caching the response would freeze it for the cache TTL.
     now = timezone.now()
     current_day = now.weekday()
     current_time = now.time()
@@ -128,4 +155,6 @@ def current_program(request):
 
     if not program:
         return Response({"detail": "Aucun programme en cours."}, status=status.HTTP_404_NOT_FOUND)
-    return Response(RadioProgramSerializer(program).data)
+    data = RadioProgramSerializer(program).data
+    data["listener_count"] = presence.count("radio", RADIO_ROOM_ID)
+    return Response(data)

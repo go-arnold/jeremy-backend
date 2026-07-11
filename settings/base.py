@@ -14,7 +14,11 @@ DEBUG = False
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
 
 # ── Applications ──────────────────────────────────────────────────────────────
+# `daphne` must be first: it's how Channels makes `manage.py runserver` handle
+# WebSocket upgrades locally (production instead runs gunicorn with a uvicorn
+# worker directly against artdukivu.asgi:application — see entrypoint.sh).
 DJANGO_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -25,6 +29,7 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "channels",
     "rest_framework",
     "rest_framework.authtoken",
     "rest_framework_simplejwt",
@@ -58,6 +63,11 @@ LOCAL_APPS = [
     "apps.analytics",
     "apps.newsletter",
     "apps.search",
+    "apps.engagement",
+    "apps.realtime",
+    "apps.streaming",
+    "apps.live_music",
+    "apps.home",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -177,6 +187,24 @@ CACHES = {
         "TIMEOUT": 60 * 15,
     }
 }
+
+# ── Channels (WebSocket chat + presence) ─────────────────────────────────────
+_channel_layer_config = {"hosts": [REDIS_URL]}
+if REDIS_URL.startswith("rediss://"):
+    _channel_layer_config = {"hosts": [{"address": REDIS_URL, "ssl_cert_reqs": None}]}
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": _channel_layer_config,
+    }
+}
+
+# ── Cloudflare Stream (live ingest/playback) ─────────────────────────────────
+CLOUDFLARE_ACCOUNT_ID = config("CLOUDFLARE_ACCOUNT_ID", default="")
+CLOUDFLARE_API_TOKEN = config("CLOUDFLARE_API_TOKEN", default="")
+CLOUDFLARE_CUSTOMER_HOSTNAME = config("CLOUDFLARE_CUSTOMER_HOSTNAME", default="")
+CLOUDFLARE_WEBHOOK_SECRET = config("CLOUDFLARE_WEBHOOK_SECRET", default="")
 
 # ── Elasticsearch ─────────────────────────────────────────────────────────────
 # Point at a managed cluster (Elastic Cloud, AWS OpenSearch, ...) in production
@@ -360,6 +388,8 @@ SPECTACULAR_SETTINGS = {
         {"name": "Newsletter", "description": "Subscribe/unsubscribe and admin campaign sending"},
         {"name": "Search", "description": "Unified full-text search across all content types"},
         {"name": "Home", "description": "Aggregated homepage payload"},
+        {"name": "Streaming", "description": "Cloudflare Stream live ingest control and webhooks"},
+        {"name": "Live Music", "description": "Live music session, schedule grid and live chat"},
     ],
 }
 

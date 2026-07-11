@@ -1,9 +1,32 @@
 from django.core.cache import cache
 from django.db import transaction
 
+from apps.streaming import services as streaming_services
+
 from .models import Emission
 
 LIVE_KEY = "emissions:live"
+
+
+@transaction.atomic
+def start_live(emission: Emission) -> Emission:
+    fields = streaming_services.start_live_input(emission.title)
+    for attr, value in fields.items():
+        setattr(emission, attr, value)
+    emission.status = Emission.STATUS_LIVE
+    emission.save()
+    cache.delete(LIVE_KEY)
+    return emission
+
+
+@transaction.atomic
+def end_live(emission: Emission) -> Emission:
+    streaming_services.stop_live_input(emission.cf_live_input_uid)
+    emission.status = Emission.STATUS_RECORDED
+    emission.cf_live_input_uid = ""
+    emission.save()
+    cache.delete(LIVE_KEY)
+    return emission
 
 
 @transaction.atomic

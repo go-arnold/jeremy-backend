@@ -43,6 +43,8 @@ class VideoDetailSerializer(serializers.ModelSerializer):
             "description",
             "thumbnail_url",
             "video_url",
+            "cf_playback_hls_url",
+            "cf_playback_dash_url",
             "duration",
             "category",
             "is_premier",

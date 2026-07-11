@@ -1,11 +1,14 @@
 from rest_framework import serializers
 
+from apps.engagement.services import engagement_counts
+
 from .models import Challenge, CommunityPost, Poll, PollOption
 
 
 class CommunityPostSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source="author.username", read_only=True)
     author_avatar = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = CommunityPost
@@ -13,6 +16,7 @@ class CommunityPostSerializer(serializers.ModelSerializer):
             "id",
             "author_name",
             "author_avatar",
+            "title",
             "content",
             "media",
             "post_type",
@@ -27,6 +31,9 @@ class CommunityPostSerializer(serializers.ModelSerializer):
             return obj.author.avatar.url
         return None
 
+    def get_comment_count(self, obj):
+        return engagement_counts(obj)["comment_count"]
+
 
 class CommunityPostWriteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -36,6 +43,20 @@ class CommunityPostWriteSerializer(serializers.ModelSerializer):
     def validate_media(self, value):
         if len(value) > 10:
             raise serializers.ValidationError("Maximum 10 médias par publication.")
+        return value
+
+
+class TalentSubmissionSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=200)
+    media = serializers.ListField(child=serializers.JSONField(), min_length=1, max_length=10)
+
+    def validate_media(self, value):
+        allowed = {"song", "video"}
+        for item in value:
+            if not isinstance(item, dict) or item.get("type") not in allowed:
+                raise serializers.ValidationError(
+                    "Chaque média doit être une chanson ou une vidéo (type: 'song' | 'video')."
+                )
         return value
 
 

@@ -16,6 +16,7 @@ class CommunityPost(models.Model):
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="community_posts"
     )
+    title = models.CharField(max_length=200, blank=True)
     content = models.TextField(max_length=2000)
     media = models.JSONField(default=list, blank=True)
     post_type = models.CharField(max_length=20, choices=TYPE_CHOICES, db_index=True)

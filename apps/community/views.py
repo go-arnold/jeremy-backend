@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.engagement.mixins import EngagementActionsMixin
 from core.pagination import StandardPagination
 from core.permissions import IsOwnerOrAdmin
 from core.serializers import BulkDeleteSerializer
@@ -18,11 +19,12 @@ from .serializers import (
     CommunityPostWriteSerializer,
     PollSerializer,
     PollWriteSerializer,
+    TalentSubmissionSerializer,
 )
 
 
 @extend_schema(tags=["Community"])
-class CommunityPostViewSet(ModelViewSet):
+class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
     pagination_class = StandardPagination
     http_method_names = ["get", "post", "delete"]
 
@@ -57,6 +59,21 @@ class CommunityPostViewSet(ModelViewSet):
         result = services.toggle_post_like(post, request.user)
         code = status.HTTP_201_CREATED if result["action"] == "liked" else status.HTTP_200_OK
         return Response(result, status=code)
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def submit_talent(self, request):
+        ser = TalentSubmissionSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        post = services.create_post(
+            {
+                "title": ser.validated_data["title"],
+                "media": ser.validated_data["media"],
+                "content": ser.validated_data["title"],
+                "post_type": CommunityPost.TYPE_TALENT,
+            },
+            request.user,
+        )
+        return Response(CommunityPostSerializer(post).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def bulk_delete(self, request):

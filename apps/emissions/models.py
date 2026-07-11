@@ -1,8 +1,10 @@
 from cloudinary.models import CloudinaryField
 from django.db import models
 
+from apps.streaming.fields import CloudflareLiveFields
 
-class Emission(models.Model):
+
+class Emission(CloudflareLiveFields):
     STATUS_LIVE = "live"
     STATUS_SCHEDULED = "scheduled"
     STATUS_RECORDED = "recorded"

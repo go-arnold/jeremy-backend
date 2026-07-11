@@ -30,11 +30,11 @@ celery -A artdukivu worker --loglevel=info --concurrency=1 -Q default,high_prior
 echo "Starting Celery Beat..."
 celery -A artdukivu beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler &
 
-echo "Starting Gunicorn..."
+echo "Starting Gunicorn (Uvicorn worker, ASGI — required for WebSocket chat/presence)..."
 exec gunicorn --bind 0.0.0.0:${PORT:-8000} \
+    --worker-class=uvicorn.workers.UvicornWorker \
     --workers=1 \
-    --threads=2 \
     --timeout=300 \
     --access-logfile - \
     --error-logfile - \
-    artdukivu.wsgi:application
+    artdukivu.asgi:application

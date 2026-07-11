@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.engagement.mixins import EngagementActionsMixin
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
 from core.serializers import BulkDeleteSerializer
@@ -22,7 +23,7 @@ from .serializers import (
 
 
 @extend_schema(tags=["Releases"])
-class ReleaseViewSet(ModelViewSet):
+class ReleaseViewSet(EngagementActionsMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
     search_fields = ["title", "artist__name"]
