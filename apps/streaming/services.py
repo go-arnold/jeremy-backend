@@ -7,11 +7,24 @@ def start_live_input(name: str, existing_uid: str = "") -> dict:
     """Creates a Cloudflare Stream live input and returns the CloudflareLiveFields values.
 
     Pass `existing_uid` (the resource's current cf_live_input_uid, if any) to make repeated
-    go_live calls idempotent — without this, a double-click or client retry creates a second
-    live input while the first keeps running and being billed with no remaining DB reference.
+    go_live calls idempotent. If that live input still exists on Cloudflare, its existing
+    credentials are reused as-is — calling go_live again while a broadcaster is already
+    connected must NOT tear down their active stream. A new live input is only created when
+    there's no existing one, or Cloudflare confirms the old one is gone (e.g. expired).
     """
     if existing_uid:
-        stop_live_input(existing_uid)
+        existing = client.get_live_input(existing_uid)
+        if existing is not None:
+            hls_url, dash_url = client.build_playback_urls(existing_uid)
+            rtmps = existing.get("rtmps", {})
+            return {
+                "cf_live_input_uid": existing_uid,
+                "cf_rtmps_url": rtmps.get("url", ""),
+                "cf_rtmps_key": rtmps.get("streamKey", ""),
+                "cf_playback_hls_url": hls_url,
+                "cf_playback_dash_url": dash_url,
+            }
+
     result = client.create_live_input(name)
     hls_url, dash_url = client.build_playback_urls(result["uid"])
     rtmps = result.get("rtmps", {})
