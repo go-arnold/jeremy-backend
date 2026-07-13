@@ -26,10 +26,17 @@ def create_live_input(name: str) -> dict:
     return response.json()["result"]
 
 
-def get_live_input(uid: str) -> dict:
+def get_live_input(uid: str) -> dict | None:
+    """Returns None if the live input doesn't exist (deleted, expired, or never existed) rather
+    than raising — callers use this to decide whether an existing uid can still be reused."""
     response = requests.get(_live_inputs_url(f"/{uid}"), headers=_headers(), timeout=10)
+    if response.status_code == 404:
+        return None
     response.raise_for_status()
-    return response.json()["result"]
+    data = response.json()
+    if not data.get("success"):
+        return None
+    return data["result"]
 
 
 def delete_live_input(uid: str) -> None:
