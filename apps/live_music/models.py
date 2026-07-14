@@ -1,5 +1,7 @@
+from cloudinary.models import CloudinaryField
 from django.db import models
 
+from apps.engagement.models import Engageable
 from apps.streaming.fields import CloudflareLiveFields
 
 DAY_CHOICES = [
@@ -8,7 +10,7 @@ DAY_CHOICES = [
 ]
 
 
-class MusicLiveSession(CloudflareLiveFields):
+class MusicLiveSession(CloudflareLiveFields, Engageable):
     """The 'Son en direct' — an independent live-music broadcast (not tied to Radio/Emissions)."""
 
     STATUS_LIVE = "live"
@@ -22,8 +24,10 @@ class MusicLiveSession(CloudflareLiveFields):
 
     title = models.CharField(max_length=200, db_index=True)
     slug = models.SlugField(max_length=220, unique=True)
+    cover = CloudinaryField("cover", blank=True, null=True)
     artists = models.ManyToManyField("artists.Artist", blank=True, related_name="live_music_sessions")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_SCHEDULED, db_index=True)
+    scheduled_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -45,6 +49,7 @@ class MusicLiveSlot(models.Model):
     """'Programmes' — the grille (per-day schedule) of sons à suivre."""
 
     title = models.CharField(max_length=200)
+    cover = CloudinaryField("cover", blank=True, null=True)
     artist = models.ForeignKey(
         "artists.Artist", on_delete=models.SET_NULL, null=True, blank=True, related_name="live_music_slots"
     )

@@ -15,10 +15,12 @@ from core.permissions import IsSelfOrAdmin
 from core.serializers import BulkDeleteSerializer
 from core.throttling import UploadThrottleMixin
 
-from . import services
+from . import profile_services, services
 from .models import ListenHistory, User
 from .serializers import (
+    ActivityEntrySerializer,
     ListenHistorySerializer,
+    SavedItemSerializer,
     UserAdminSerializer,
     UserBulkUpdateSerializer,
     UserSerializer,
@@ -125,7 +127,7 @@ class UserViewSet(UploadThrottleMixin, GenericViewSet, mixins.ListModelMixin, mi
         # bypasses that mechanism entirely, so it must be enforced here.
         if self.action in ("list", "bulk_update", "bulk_delete"):
             return [permissions.IsAdminUser()]
-        if self.action in ("retrieve", "update", "partial_update"):
+        if self.action in ("retrieve", "update", "partial_update", "saved", "activity"):
             return [IsSelfOrAdmin()]
         return super().get_permissions()
 
@@ -159,6 +161,19 @@ class UserViewSet(UploadThrottleMixin, GenericViewSet, mixins.ListModelMixin, mi
         user = self.get_object()
         qs = ListenHistory.objects.filter(user=user).order_by("-listened_at")[:50]
         return Response(ListenHistorySerializer(qs, many=True).data)
+
+    @action(detail=True, methods=["get"], url_path="saved")
+    def saved(self, request, id=None):
+        """Profil > signets — every non-live content item this user bookmarked to consume later."""
+        user = self.get_object()
+        return Response(SavedItemSerializer(profile_services.get_saved_items(user), many=True).data)
+
+    @action(detail=True, methods=["get"], url_path="activity")
+    def activity(self, request, id=None):
+        """Profil > activité — this user's likes/comments across the whole app, last 24h
+        (falls back to their most recent activity if they haven't been active in 24h)."""
+        user = self.get_object()
+        return Response(ActivityEntrySerializer(profile_services.get_activity_feed(user), many=True).data)
 
     @action(detail=False, methods=["post"])
     def bulk_update(self, request):

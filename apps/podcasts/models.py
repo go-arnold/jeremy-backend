@@ -50,6 +50,7 @@ class PodcastEpisode(Engageable):
     episode_number = models.PositiveSmallIntegerField(default=1)
     season_number = models.PositiveSmallIntegerField(default=1)
     guests = models.JSONField(default=list, blank=True)
+    transcript = models.TextField(blank=True)
     play_count = models.PositiveIntegerField(default=0)
     is_featured = models.BooleanField(default=False, db_index=True)
     published_at = models.DateTimeField(db_index=True)

@@ -1,5 +1,8 @@
 from allauth.account.signals import email_confirmed
+from django.db.models.signals import post_save
 from django.dispatch import receiver
+
+from .models import User
 
 
 @receiver(email_confirmed)
@@ -14,3 +17,13 @@ def mark_user_verified(sender, request, email_address, **kwargs):
     if not user.is_verified:
         user.is_verified = True
         user.save(update_fields=["is_verified"])
+
+
+@receiver(post_save, sender=User)
+def award_default_badges_on_signup(sender, instance, created, **kwargs):
+    """Badges with threshold_seconds=0 (e.g. 'Nouveau membre') apply to everyone — award them
+    immediately at signup rather than waiting for the user's first consumption heartbeat."""
+    if created:
+        from apps.gamification.services import award_default_badges
+
+        award_default_badges(instance)

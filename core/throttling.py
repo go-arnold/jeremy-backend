@@ -17,6 +17,18 @@ class UploadRateThrottle(UserRateThrottle):
     scope = "upload"
 
 
+class ConsumptionRateThrottle(UserRateThrottle):
+    """The consumption heartbeat is expected roughly every 30s per actively-playing stream —
+    this leaves headroom for a couple of concurrent players without allowing the endpoint to be
+    hammered to fabricate badge/ranking progress."""
+
+    scope = "consumption"
+
+
+class ChatRateThrottle(UserRateThrottle):
+    scope = "chat"
+
+
 class UploadThrottleMixin:
     """Adds the stricter `upload` throttle scope on top of the default ones for create/update
     actions — for ViewSets whose write serializer accepts a CloudinaryField (image/audio/video).

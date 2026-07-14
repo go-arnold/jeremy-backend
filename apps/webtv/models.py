@@ -11,12 +11,14 @@ class WebTVVideo(CloudflareLiveFields, Engageable):
     CATEGORY_DOCS = "docs"
     CATEGORY_INTERVIEWS = "interviews"
     CATEGORY_PREMIERS = "premiers"
+    CATEGORY_CONCERTS = "concerts"
     CATEGORY_CHOICES = [
         (CATEGORY_FREESTYLES, "Freestyles"),
         (CATEGORY_STUDIO, "Studio Sessions"),
         (CATEGORY_DOCS, "Documentaires"),
         (CATEGORY_INTERVIEWS, "Interviews"),
         (CATEGORY_PREMIERS, "Premières"),
+        (CATEGORY_CONCERTS, "Concerts"),
     ]
 
     title = models.CharField(max_length=300, db_index=True)

@@ -14,7 +14,12 @@ def start_live_input(name: str, existing_uid: str = "") -> dict:
     """
     if existing_uid:
         existing = client.get_live_input(existing_uid)
-        if existing is not None:
+        # A live input in Cloudflare's "errored" state (corrupted/malformed) is permanently
+        # broken — reusing it would hand the broadcaster credentials that can never connect.
+        # Fall through to create a fresh one instead; any other state (idle/disconnected/
+        # connected) is safe to reuse as-is.
+        state = (existing or {}).get("status", {}).get("current", {}).get("state")
+        if existing is not None and state != "errored":
             hls_url, dash_url = client.build_playback_urls(existing_uid)
             rtmps = existing.get("rtmps", {})
             return {

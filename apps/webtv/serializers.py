@@ -96,6 +96,10 @@ class VideoBulkUpdateItemSerializer(serializers.Serializer):
     location = serializers.CharField(max_length=100, required=False, allow_blank=True)
     published_at = serializers.DateTimeField(required=False)
 
+    def validate_video_url(self, value):
+        verify_cloudinary_asset(value, "video")
+        return value
+
 
 class VideoBulkCreateSerializer(serializers.Serializer):
     items = VideoWriteSerializer(many=True, min_length=1, max_length=100)

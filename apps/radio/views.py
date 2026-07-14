@@ -11,7 +11,7 @@ from apps.realtime import presence
 from core.pagination import SmallPagination
 from core.permissions import IsAdminOrReadOnly, IsOwnerOrAdmin
 from core.serializers import BulkDeleteSerializer
-from core.throttling import UploadThrottleMixin
+from core.throttling import ChatRateThrottle, UploadThrottleMixin
 
 from . import services
 from .models import RadioChat, RadioProgram
@@ -114,6 +114,11 @@ class RadioChatViewSet(ModelViewSet):
         if self.action == "destroy":
             return [IsOwnerOrAdmin()]
         return [permissions.AllowAny()]
+
+    def get_throttles(self):
+        if self.action == "create":
+            return [ChatRateThrottle()] + super().get_throttles()
+        return super().get_throttles()
 
     def perform_create(self, serializer):
         chat = serializer.save(user=self.request.user)

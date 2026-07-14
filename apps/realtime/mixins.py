@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from core.pagination import SmallPagination
+from core.throttling import ChatRateThrottle
 
 from . import presence
 from .models import LiveChatMessage
@@ -21,6 +22,11 @@ class LiveChatViewSetMixin:
     """
 
     chat_room_type = None
+
+    def get_throttles(self):
+        if self.action == "chat" and self.request.method == "POST":
+            return [ChatRateThrottle()] + super().get_throttles()
+        return super().get_throttles()
 
     @action(detail=True, methods=["get", "post"], permission_classes=[permissions.IsAuthenticatedOrReadOnly])
     def chat(self, request, *args, **kwargs):
