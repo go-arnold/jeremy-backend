@@ -68,6 +68,7 @@ LOCAL_APPS = [
     "apps.streaming",
     "apps.live_music",
     "apps.home",
+    "apps.media_uploads",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -390,6 +391,7 @@ SPECTACULAR_SETTINGS = {
         {"name": "Home", "description": "Aggregated homepage payload"},
         {"name": "Streaming", "description": "Cloudflare Stream live ingest control and webhooks"},
         {"name": "Live Music", "description": "Live music session, schedule grid and live chat"},
+        {"name": "Media", "description": "Signed direct-to-Cloudinary upload for audio/video/image"},
     ],
 }
 

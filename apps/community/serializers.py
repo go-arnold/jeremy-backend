@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
+from apps.media_uploads.validation import validate_media_items
 
 from .models import Challenge, CommunityPost, Poll, PollOption
 
@@ -50,6 +51,7 @@ class CommunityPostWriteSerializer(serializers.ModelSerializer):
     def validate_media(self, value):
         if len(value) > 10:
             raise serializers.ValidationError("Maximum 10 médias par publication.")
+        validate_media_items(value)
         return value
 
 
@@ -64,6 +66,7 @@ class TalentSubmissionSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     "Chaque média doit être une chanson ou une vidéo (type: 'song' | 'video')."
                 )
+        validate_media_items(value)
         return value
 
 

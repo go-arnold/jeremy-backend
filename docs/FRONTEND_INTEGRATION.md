@@ -22,13 +22,14 @@ diffusion en direct, engagement).
 13. [Communauté](#communauté)
 14. [Sorties musicales (releases)](#sorties-musicales-releases)
 15. [Système d'engagement générique](#système-dengagement-générique)
-16. [Diffusion en direct (Cloudflare Stream) côté frontend](#diffusion-en-direct-cloudflare-stream-côté-frontend)
-17. [Temps réel : WebSocket (chat + présence)](#temps-réel--websocket-chat--présence)
-18. [Page d'accueil](#page-daccueil)
-19. [Recherche](#recherche)
-20. [Newsletter](#newsletter)
-21. [Analytics](#analytics)
-22. [Exemple de client HTTP avec rafraîchissement automatique du token](#exemple-de-client-http-avec-rafraîchissement-automatique-du-token)
+16. [Upload de médias (audio/vidéo/image)](#upload-de-médias-audiovidéoimage)
+17. [Diffusion en direct (Cloudflare Stream) côté frontend](#diffusion-en-direct-cloudflare-stream-côté-frontend)
+18. [Temps réel : WebSocket (chat + présence)](#temps-réel--websocket-chat--présence)
+19. [Page d'accueil](#page-daccueil)
+20. [Recherche](#recherche)
+21. [Newsletter](#newsletter)
+22. [Analytics](#analytics)
+23. [Exemple de client HTTP avec rafraîchissement automatique du token](#exemple-de-client-http-avec-rafraîchissement-automatique-du-token)
 
 ---
 
@@ -376,6 +377,155 @@ enregistré pour plus tard." }` tant que la ressource est en statut `live` (`sta
 `is_live == true` selon le modèle). Le frontend doit masquer ou désactiver le bouton
 "enregistrer" pour tout contenu marqué en direct plutôt que de compter sur cette erreur pour
 l'UX — l'erreur reste une garde-fou serveur, pas le mécanisme principal d'affichage.
+
+---
+
+## Upload de médias (audio/vidéo/image)
+
+Les champs qui acceptent un média (`video_url` sur les vidéos web-tv, `audio_url` sur les
+épisodes de podcast, `preview_url` sur les sorties, `media` sur les posts communauté) attendent
+une **URL déjà hébergée sur Cloudinary** — pas un fichier brut envoyé à ces endpoints. Le fichier
+doit être envoyé **directement à Cloudinary depuis le frontend** (jamais via notre API), pour
+rester rapide même sur de grosses vidéos et ne jamais charger notre serveur avec le transfert
+binaire.
+
+### Étape 1 — demander une signature
+
+```http
+POST /api/v1/media/upload-signature/
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "context": "webtv_video" }
+```
+
+`context` est une valeur fixe parmi une liste blanche (pas de dossier/type arbitraire) :
+
+| Contexte | Type | Accès |
+|---|---|---|
+| `webtv_video` | vidéo | admin |
+| `webtv_thumbnail` | image | admin |
+| `podcast_audio` | audio | admin |
+| `podcast_cover` | image | admin |
+| `release_cover` | image | admin |
+| `release_preview` | audio | admin |
+| `artist_photo`, `artist_cover`, `artist_gallery_photo` | image | admin |
+| `emission_cover`, `radio_cover`, `challenge_cover` | image | admin |
+| `community_image` | image | **tout utilisateur authentifié** |
+| `community_video` | audio/vidéo | **tout utilisateur authentifié** |
+| `user_avatar` | image | **tout utilisateur authentifié** (soi-même) |
+
+Réponse :
+
+```json
+{
+  "timestamp": 1732000000,
+  "signature": "a1b2c3...",
+  "api_key": "235241863688864",
+  "cloud_name": "dc4scpfuz",
+  "folder": "webtv/videos",
+  "resource_type": "video",
+  "upload_url": "https://api.cloudinary.com/v1_1/dc4scpfuz/video/upload"
+}
+```
+
+### Étape 2 — uploader directement à Cloudinary
+
+```ts
+async function uploadToCloudinary(file: File, context: string, token: string) {
+  const sigRes = await fetch(`${API_BASE}/media/upload-signature/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ context }),
+  });
+  const sig = await sigRes.json();
+
+  const form = new FormData();
+  form.append("file", file);
+  form.append("api_key", sig.api_key);
+  form.append("timestamp", String(sig.timestamp));
+  form.append("signature", sig.signature);
+  form.append("folder", sig.folder);
+
+  const uploadRes = await fetch(sig.upload_url, { method: "POST", body: form });
+  const uploaded = await uploadRes.json();
+  return uploaded.secure_url; // à envoyer tel quel dans video_url / audio_url / media[].url
+}
+```
+
+### Étape 3 — créer/mettre à jour l'entité avec l'URL obtenue
+
+```http
+POST /api/v1/webtv/videos/
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{ "title": "...", "video_url": "https://res.cloudinary.com/dc4scpfuz/video/upload/v.../webtv/videos/xyz.mp4", ... }
+```
+
+### UI attendue côté frontend : les deux options, toujours
+
+Le champ (`video_url`, `audio_url`, `preview_url`, `media[].url`) accepte indifféremment une
+URL externe (YouTube, Vimeo, un autre CDN…) **ou** une URL Cloudinary issue d'un upload — c'est
+le composant d'interface qui doit proposer les deux à l'utilisateur, pas l'API. Un simple
+`<input type="file">` HTML ouvre nativement le sélecteur de fichiers sur desktop et la
+galerie/appareil photo sur mobile — aucun code spécifique mobile n'est nécessaire.
+
+```tsx
+function MediaField({ context, value, onChange }: { context: string; value: string; onChange: (url: string) => void }) {
+  const [mode, setMode] = useState<"upload" | "url">("upload");
+  const [uploading, setUploading] = useState(false);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const url = await uploadToCloudinary(file, context, getAccessToken());
+      onChange(url);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div>
+      <div role="tablist">
+        <button type="button" onClick={() => setMode("upload")}>Choisir un fichier</button>
+        <button type="button" onClick={() => setMode("url")}>Ou coller un lien</button>
+      </div>
+      {mode === "upload" ? (
+        <input type="file" accept="video/*" onChange={handleFileChange} disabled={uploading} />
+      ) : (
+        <input type="url" placeholder="https://..." value={value} onChange={(e) => onChange(e.target.value)} />
+      )}
+      {uploading && <p>Envoi en cours…</p>}
+    </div>
+  );
+}
+```
+
+`accept="video/*"` (ou `"audio/*"`, `"image/*"` selon le champ) filtre les fichiers proposés par
+le sélecteur natif — c'est un confort pour l'utilisateur, **pas** une validation ; la vraie
+validation reste celle faite côté serveur au moment de la création/mise à jour de l'entité.
+
+### Validation stricte côté serveur
+
+Si l'URL fournie pointe vers **notre** compte Cloudinary, le backend vérifie — via l'API
+Cloudinary, donc sur le **contenu binaire réellement stocké**, pas juste l'extension du nom de
+fichier — que la ressource existe bien et correspond au type attendu (`video_url` doit être une
+vraie vidéo, pas une image maquillée en `.mp4`). Une URL externe (ex. un lien YouTube existant)
+n'est pas concernée par cette vérification — elle est acceptée telle quelle, comme aujourd'hui.
+
+En cas d'échec :
+
+```json
+{ "video_url": ["Aucun média correspondant trouvé sur Cloudinary — vérifiez que l'upload a bien abouti."] }
+```
+ou
+```json
+{ "video_url": ["Ce champ attend un contenu de type « video », pas « image »."] }
+```
 
 ---
 
