@@ -29,7 +29,13 @@ def _key(room_type: str, room_id: str) -> str:
 
 
 def join(room_type: str, room_id: str, member_id: str) -> None:
-    _get_client().zadd(_key(room_type, room_id), {member_id: time.time()})
+    key = _key(room_type, room_id)
+    conn = _get_client()
+    conn.zadd(key, {member_id: time.time()})
+    # Refresh the key's own TTL on every join/heartbeat so an abandoned or fabricated room
+    # (nobody left to call `leave`, e.g. an ungraceful disconnect) expires on its own instead of
+    # leaving an empty ZSET in Redis forever.
+    conn.expire(key, PRESENCE_TTL_SECONDS * 2)
 
 
 def heartbeat(room_type: str, room_id: str, member_id: str) -> None:

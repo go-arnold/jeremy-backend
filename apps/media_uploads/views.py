@@ -1,7 +1,9 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.response import Response
+
+from core.throttling import UploadRateThrottle
 
 from . import services
 
@@ -9,6 +11,7 @@ from . import services
 @extend_schema(tags=["Media"])
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
+@throttle_classes([UploadRateThrottle])
 def upload_signature(request):
     """Issues signed params for a direct-to-Cloudinary upload — the frontend POSTs the
     actual file straight to Cloudinary's `upload_url` using these params, never through

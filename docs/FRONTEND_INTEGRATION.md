@@ -11,25 +11,26 @@ diffusion en direct, engagement).
 2. [Authentification](#authentification)
 3. [Conventions communes](#conventions-communes)
 4. [Utilisateurs](#utilisateurs)
-5. [Artistes](#artistes)
-6. [Articles et magazine](#articles-et-magazine)
-7. [Événements](#événements)
-8. [Podcasts](#podcasts)
-9. [Radio](#radio)
-10. [Web TV](#web-tv)
-11. [Émissions live](#émissions-live)
-12. [Live Music](#live-music)
-13. [Communauté](#communauté)
-14. [Sorties musicales (releases)](#sorties-musicales-releases)
-15. [Système d'engagement générique](#système-dengagement-générique)
-16. [Upload de médias (audio/vidéo/image)](#upload-de-médias-audiovidéoimage)
-17. [Diffusion en direct (Cloudflare Stream) côté frontend](#diffusion-en-direct-cloudflare-stream-côté-frontend)
-18. [Temps réel : WebSocket (chat + présence)](#temps-réel--websocket-chat--présence)
-19. [Page d'accueil](#page-daccueil)
-20. [Recherche](#recherche)
-21. [Newsletter](#newsletter)
-22. [Analytics](#analytics)
-23. [Exemple de client HTTP avec rafraîchissement automatique du token](#exemple-de-client-http-avec-rafraîchissement-automatique-du-token)
+5. [Profil : signets, activité, gamification](#profil--signets-activité-gamification)
+6. [Artistes](#artistes)
+7. [Articles et magazine](#articles-et-magazine)
+8. [Événements](#événements)
+9. [Podcasts](#podcasts)
+10. [Radio](#radio)
+11. [Web TV](#web-tv)
+12. [Émissions live](#émissions-live)
+13. [Live Music](#live-music)
+14. [Communauté](#communauté)
+15. [Sorties musicales (releases)](#sorties-musicales-releases)
+16. [Système d'engagement générique](#système-dengagement-générique)
+17. [Upload de médias (audio/vidéo/image)](#upload-de-médias-audiovidéoimage)
+18. [Diffusion en direct (Cloudflare Stream) côté frontend](#diffusion-en-direct-cloudflare-stream-côté-frontend)
+19. [Temps réel : WebSocket (chat + présence)](#temps-réel--websocket-chat--présence)
+20. [Page d'accueil](#page-daccueil)
+21. [Recherche](#recherche)
+22. [Newsletter](#newsletter)
+23. [Analytics](#analytics)
+24. [Exemple de client HTTP avec rafraîchissement automatique du token](#exemple-de-client-http-avec-rafraîchissement-automatique-du-token)
 
 ---
 
@@ -122,6 +123,127 @@ endpoints, en particulier `/auth/login/`.
 | Détail / mise à jour partielle | GET / PATCH | `/users/{id}/` |
 | Favoris (artistes) | GET / POST | `/users/{id}/favorites/` |
 | Historique d'écoute | GET | `/users/{id}/history/` |
+| Signets (profil > signets) | GET | `/users/{id}/saved/` |
+| Activité (profil > activité) | GET | `/users/{id}/activity/` |
+
+`/saved/` et `/activity/` ne sont lisibles que par l'utilisateur lui-même ou un admin (contrairement
+à `/favorites/`et `/history/`, publiques à tout utilisateur authentifié) — voir la section
+[Profil](#profil--signets-activité-gamification) pour le détail des deux formes de réponse.
+
+## Profil : signets, activité, gamification
+
+Trois besoins distincts du profil ("Aperçu / Activité / Badges" côté frontend) sont couverts par des
+endpoints d'agrégation qui traversent plusieurs types de contenu et, pour l'activité, plusieurs
+systèmes d'engagement (le générique et celui, historique, propre aux articles).
+
+### Signets — `GET /users/{id}/saved/`
+
+Renvoie tout ce que l'utilisateur a mis de côté ("écouter/regarder plus tard"), tous types de
+contenu confondus (Web TV, podcasts, sorties musicales, posts communauté), triés du plus récent au
+plus ancien. Le live n'est jamais mis en signet (cohérent avec la règle "pas de save sur du direct"
+du [système d'engagement](#système-dengagement-générique)).
+
+```json
+[
+  {
+    "saved_at": "2026-07-10T18:32:00Z",
+    "kind": "webtv",
+    "id": 42,
+    "slug": "freestyle-goma-vol-3",
+    "title": "Freestyle Goma Vol. 3",
+    "cover_url": "https://res.cloudinary.com/.../thumbnail.jpg"
+  },
+  {
+    "saved_at": "2026-07-09T09:12:00Z",
+    "kind": "community",
+    "id": 17,
+    "slug": null,
+    "title": "Mon nouveau son...",
+    "cover_url": "https://res.cloudinary.com/.../cover.jpg"
+  }
+]
+```
+
+`kind` ∈ `webtv | podcast | release | community` — utile pour router vers la bonne page côté
+frontend. `slug` est `null` pour les types qui n'en ont pas (ex. posts communauté) — utiliser `id`
+dans ce cas.
+
+### Activité — `GET /users/{id}/activity/`
+
+Le "log" des likes et commentaires de l'utilisateur, sur l'ensemble de l'app — à la fois le système
+d'engagement générique (Web TV, podcasts, releases, communauté) et le système historique propre aux
+articles de blog. Fenêtré sur les **dernières 24h** ; si l'utilisateur n'a pas été actif dans les
+dernières 24h, l'endpoint bascule automatiquement sur son activité la plus récente (toutes dates
+confondues) pour éviter un profil vide — l'UI n'a rien de spécial à gérer, la fenêtre est
+transparente.
+
+```json
+[
+  {
+    "action": "comment",
+    "created_at": "2026-07-14T20:05:00Z",
+    "excerpt": "Toujours aussi propre !",
+    "target": { "kind": "webtv", "id": 42, "slug": "freestyle-goma-vol-3", "title": "Freestyle Goma Vol. 3", "cover_url": "..." }
+  },
+  {
+    "action": "like",
+    "created_at": "2026-07-14T19:40:00Z",
+    "target": { "kind": "article", "id": 8, "slug": "interview-artiste-du-mois", "title": "Interview : l'artiste du mois", "cover_url": "..." }
+  }
+]
+```
+
+`action` ∈ `like | comment`. `excerpt` (les 140 premiers caractères du commentaire) n'est présent
+que pour `action: "comment"`. `target.kind` ∈ `webtv | podcast | release | community | article`.
+
+### Badges et temps de consommation — `apps/gamification`
+
+Les badges classent un utilisateur sur l'ensemble de la plateforme (toutes catégories de contenu
+confondues), à partir du temps de consommation cumulé — pas d'un compteur par type de contenu. Un
+badge, une fois débloqué, **n'est jamais retiré**, même si le seuil qui l'a déclenché change
+ensuite côté admin. Les seuils sont des données (table `Badge`, modifiable depuis l'admin Django),
+pas des constantes codées en dur — les niveaux (ex. "3h", "18h", ...) sont à ajuster librement sans
+déploiement.
+
+| Action | Méthode | Endpoint | Auth |
+|---|---|---|---|
+| Catalogue des badges actifs | GET | `/gamification/badges/` | Publique |
+| Badges obtenus par un utilisateur | GET | `/gamification/users/{user_id}/badges/` | Publique (les badges sont faits pour être affichés sur un profil) |
+| Heartbeat de consommation | POST | `/gamification/consumption/` | Authentifié |
+| Classement des médias suivis | GET | `/gamification/media-ranking/` | Authentifié (soi-même uniquement) |
+
+**Heartbeat** — le lecteur (audio/vidéo/radio) doit appeler cet endpoint périodiquement (ex.
+toutes les 30s) **tant que le contenu joue réellement** (pause = pas d'appel) :
+
+```json
+POST /gamification/consumption/
+{
+  "content_type": "podcast",           // radio | podcast | webtv | live_music | release
+  "object_id": 42,
+  "seconds": 30,                        // borné à 3600 par appel — anti-abus
+  "title": "Nom affiché (optionnel, dénormalisé pour le classement)",
+  "cover_url": "https://... (optionnel)"
+}
+```
+
+Réponse — badges nouvellement débloqués par ce heartbeat (souvent vide) :
+
+```json
+{ "newly_earned_badges": [{ "id": 3, "slug": "bronze", "name": "Bronze", "description": "...", "icon_url": null, "threshold_seconds": 10800, "order": 1 }] }
+```
+
+Utiliser cette réponse pour afficher une notification "badge débloqué !" côté client. Un badge à
+`threshold_seconds: 0` est attribué automatiquement à l'inscription (aucun appel requis).
+
+**Classement des médias suivis** (section "Aperçu" du profil — médias les plus consommés, classés
+par heures) :
+
+```json
+GET /gamification/media-ranking/
+[
+  { "content_type": "podcast", "object_id": 42, "title": "...", "cover_url": "...", "total_seconds": 14400 }
+]
+```
 
 ## Artistes
 
@@ -176,7 +298,8 @@ Le "magazine" de la page d'accueil correspond aux `Article` avec `article_type="
 Le détail d'un épisode (`EpisodeDetailSerializer`) contient tout ce qu'il faut pour un lecteur
 audio : `title`, `duration` (chaîne, ex. `"42:10"`), `description` (utilisé comme légende/infos),
 `audio_url` (résout `audio_file` Cloudinary ou `audio_url` externe), `cover_url`,
-`episode_number`, `season_number`, `guests`, `published_at`.
+`episode_number`, `season_number`, `guests`, `published_at`, `transcript` (texte intégral de la
+transcription, facultatif — vide si non fournie par l'admin).
 
 ## Radio
 
@@ -227,7 +350,8 @@ présence/push que les autres salons — voir [Temps réel](#temps-réel--websoc
 | Arrêter le direct (admin) | POST | `/webtv/videos/{slug}/end_live/` |
 | J'aime / commentaires / partage / enregistrer | — | voir [engagement générique](#système-dengagement-générique) |
 
-Catégories disponibles : `freestyles`, `studio_sessions`, `docs`, `interviews`, `premiers`.
+Catégories disponibles : `freestyles`, `studio_sessions`, `docs`, `interviews`, `premiers`,
+`concerts`.
 
 Le catalogue "pas en direct" (toutes les autres vidéos) s'obtient en filtrant côté client sur
 `is_live=false`, ou via `?is_live=false` si un filtre dédié est ajouté côté backend (à date, le
@@ -267,11 +391,16 @@ grille de programmes + son propre chat.
   "slug": "session-acoustique-alesh",
   "artist_names": ["Alesh"],
   "status": "live",
+  "cover_url": "https://res.cloudinary.com/.../cover.jpg",
+  "scheduled_at": "2026-07-11T18:00:00Z",
   "cf_playback_hls_url": "https://customer-xxx.cloudflarestream.com/<uid>/manifest/video.m3u8",
   "online_followers": 128,
   "live_started_at": "2026-07-11T18:00:00Z"
 }
 ```
+
+`cover_url` (image de fond, sessions et créneaux de la grille) et `scheduled_at` (date/heure prévue
+d'une session) sont facultatifs — à prévoir en absence pour les sessions pas encore programmées.
 
 `online_followers` est lu en direct depuis la présence WebSocket à chaque appel (pas de cache).
 Pour un compteur qui se met à jour sans polling, brancher le WebSocket (voir plus bas) plutôt que
@@ -302,9 +431,9 @@ Content-Type: application/json
 }
 ```
 
-`media` accepte un ou plusieurs éléments, chacun avec `type` égal à `"song"` ou `"video"` (le
-fichier doit avoir été téléversé au préalable vers Cloudinary par le frontend ; ce endpoint
-n'accepte que la référence, pas un fichier brut). La réponse renvoie le post créé avec
+`media` accepte un ou plusieurs éléments, chacun avec `type` égal à `"song"`, `"video"` ou
+`"image"` (le fichier doit avoir été téléversé au préalable vers Cloudinary par le frontend ; ce
+endpoint n'accepte que la référence, pas un fichier brut). La réponse renvoie le post créé avec
 `post_type: "talent"`.
 
 ## Sorties musicales (releases)
@@ -412,7 +541,8 @@ Content-Type: application/json
 | `artist_photo`, `artist_cover`, `artist_gallery_photo` | image | admin |
 | `emission_cover`, `radio_cover`, `challenge_cover` | image | admin |
 | `community_image` | image | **tout utilisateur authentifié** |
-| `community_video` | audio/vidéo | **tout utilisateur authentifié** |
+| `community_video` | vidéo | **tout utilisateur authentifié** |
+| `community_song` | audio | **tout utilisateur authentifié** |
 | `user_avatar` | image | **tout utilisateur authentifié** (soi-même) |
 
 Réponse :

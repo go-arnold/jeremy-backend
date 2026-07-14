@@ -91,6 +91,25 @@ class ListenHistorySerializer(serializers.ModelSerializer):
         read_only_fields = ["listened_at"]
 
 
+class ProfileTargetSerializer(serializers.Serializer):
+    kind = serializers.CharField()
+    id = serializers.IntegerField(allow_null=True)
+    slug = serializers.CharField(allow_null=True, allow_blank=True)
+    title = serializers.CharField(allow_blank=True)
+    cover_url = serializers.CharField(allow_blank=True)
+
+
+class SavedItemSerializer(ProfileTargetSerializer):
+    saved_at = serializers.DateTimeField()
+
+
+class ActivityEntrySerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["like", "comment"])
+    created_at = serializers.DateTimeField()
+    excerpt = serializers.CharField(required=False, allow_blank=True)
+    target = ProfileTargetSerializer()
+
+
 class UserBulkUpdateItemSerializer(serializers.Serializer):
     id = serializers.IntegerField(min_value=1)
     role = serializers.ChoiceField(choices=User.ROLE_CHOICES, required=False)

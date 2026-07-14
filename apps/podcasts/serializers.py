@@ -70,6 +70,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "episode_number",
             "season_number",
             "guests",
+            "transcript",
             "play_count",
             "is_featured",
             "published_at",
@@ -100,6 +101,7 @@ class EpisodeWriteSerializer(serializers.ModelSerializer):
             "episode_number",
             "season_number",
             "guests",
+            "transcript",
             "is_featured",
             "published_at",
         ]

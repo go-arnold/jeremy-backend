@@ -60,11 +60,12 @@ class TalentSubmissionSerializer(serializers.Serializer):
     media = serializers.ListField(child=serializers.JSONField(), min_length=1, max_length=10)
 
     def validate_media(self, value):
-        allowed = {"song", "video"}
+        allowed = {"song", "video", "image"}
         for item in value:
             if not isinstance(item, dict) or item.get("type") not in allowed:
                 raise serializers.ValidationError(
-                    "Chaque média doit être une chanson ou une vidéo (type: 'song' | 'video')."
+                    "Chaque média doit être une image, une chanson ou une vidéo "
+                    "(type: 'image' | 'song' | 'video')."
                 )
         validate_media_items(value)
         return value

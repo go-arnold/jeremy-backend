@@ -69,6 +69,7 @@ LOCAL_APPS = [
     "apps.live_music",
     "apps.home",
     "apps.media_uploads",
+    "apps.gamification",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -292,6 +293,8 @@ REST_FRAMEWORK = {
         "user_burst": "120/min",
         "auth": "10/min",
         "upload": "5/min",
+        "consumption": "12/min",
+        "chat": "20/min",
     },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
@@ -392,6 +395,7 @@ SPECTACULAR_SETTINGS = {
         {"name": "Streaming", "description": "Cloudflare Stream live ingest control and webhooks"},
         {"name": "Live Music", "description": "Live music session, schedule grid and live chat"},
         {"name": "Media", "description": "Signed direct-to-Cloudinary upload for audio/video/image"},
+        {"name": "Gamification", "description": "Badges, consumption tracking, media ranking"},
     ],
 }
 

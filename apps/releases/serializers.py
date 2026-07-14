@@ -89,6 +89,11 @@ class ReleaseBulkUpdateItemSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True)
     preview_url = serializers.URLField(required=False, allow_blank=True)
 
+    def validate_preview_url(self, value):
+        if value:
+            verify_cloudinary_asset(value, "video")
+        return value
+
 
 class ReleaseBulkCreateSerializer(serializers.Serializer):
     items = ReleaseWriteSerializer(many=True, min_length=1, max_length=100)

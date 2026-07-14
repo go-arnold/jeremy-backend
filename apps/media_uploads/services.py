@@ -22,6 +22,7 @@ UPLOAD_CONTEXTS = {
     "challenge_cover": {"resource_type": "image", "folder": "community/challenges", "staff_only": True},
     "community_image": {"resource_type": "image", "folder": "community/posts", "staff_only": False},
     "community_video": {"resource_type": "video", "folder": "community/posts", "staff_only": False},
+    "community_song": {"resource_type": "video", "folder": "community/posts", "staff_only": False},
     "user_avatar": {"resource_type": "image", "folder": "users/avatars", "staff_only": False},
 }
 
