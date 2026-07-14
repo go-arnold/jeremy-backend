@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.media_uploads.validation import verify_cloudinary_asset
+
 from .models import WebTVVideo
 
 
@@ -76,6 +78,10 @@ class VideoWriteSerializer(serializers.ModelSerializer):
             "published_at",
         ]
         extra_kwargs = {"slug": {"required": False}}
+
+    def validate_video_url(self, value):
+        verify_cloudinary_asset(value, "video")
+        return value
 
 
 class VideoBulkUpdateItemSerializer(serializers.Serializer):

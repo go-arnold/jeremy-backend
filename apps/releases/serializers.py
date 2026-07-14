@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.media_uploads.validation import verify_cloudinary_asset
+
 from .models import MusicRelease
 
 
@@ -69,6 +71,11 @@ class ReleaseWriteSerializer(serializers.ModelSerializer):
             "preview_url",
         ]
         extra_kwargs = {"slug": {"required": False}}
+
+    def validate_preview_url(self, value):
+        if value:
+            verify_cloudinary_asset(value, "video")
+        return value
 
 
 class ReleaseBulkUpdateItemSerializer(serializers.Serializer):
