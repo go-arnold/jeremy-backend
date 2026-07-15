@@ -1,10 +1,33 @@
 import logging
 
 from allauth.account.adapter import DefaultAccountAdapter
-from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
+from allauth.socialaccount.adapter import DefaultSocialAccountAdapter, get_adapter
+from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
+from allauth.socialaccount.providers.oauth2.client import OAuth2Error
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+
+class LoggingGoogleOAuth2Adapter(GoogleOAuth2Adapter):
+    """Identical to allauth's GoogleOAuth2Adapter, except it logs Google's actual response
+    (status + body) before raising — allauth's own `_fetch_user_info` swallows both into a
+    single generic "Request to user info failed" message, which makes real failures (wrong
+    token type, insufficient scope, expired token, ...) indistinguishable from the logs alone.
+    """
+
+    def _fetch_user_info(self, access_token):
+        headers = {"Authorization": f"Bearer {access_token}"}
+        with get_adapter().get_requests_session() as sess:
+            resp = sess.get(self.identity_url, headers=headers)
+            if not resp.ok:
+                logger.error(
+                    "Google userinfo request failed: status=%s body=%s",
+                    resp.status_code,
+                    resp.text[:500],
+                )
+                raise OAuth2Error("Request to user info failed")
+            return resp.json()
 
 
 class AccountAdapter(DefaultAccountAdapter):
@@ -53,9 +76,25 @@ class SocialAccountAdapter(DefaultSocialAccountAdapter):
 
     def populate_user(self, request, sociallogin, data):
         user = super().populate_user(request, sociallogin, data)
-        # Ensure username is always set (our model requires it)
-        if not getattr(user, "username", None):
-            email = data.get("email", "")
-            user.username = email.split("@")[0][:30] if email else ""
+        email = data.get("email", "")
+        base_username = getattr(user, "username", None) or (email.split("@")[0][:30] if email else "user")
+        user.username = self._unique_username(base_username)
         logger.info(f"Populated user: {user}")
         return user
+
+    def _unique_username(self, base: str) -> str:
+        """`username` is unique on our User model, but allauth derives it from the email's
+        local part with no collision check — two different people (or a Google login
+        colliding with an existing manual signup) sharing the same local part before the '@'
+        would otherwise crash with an uncaught IntegrityError during the OAuth callback."""
+        from .models import User
+
+        base = (base or "user")[:30]
+        if not User.objects.filter(username=base).exists():
+            return base
+        suffix = 2
+        while True:
+            candidate = f"{base[: 30 - len(str(suffix))]}{suffix}"
+            if not User.objects.filter(username=candidate).exists():
+                return candidate
+            suffix += 1
