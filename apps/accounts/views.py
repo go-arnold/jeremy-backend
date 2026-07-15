@@ -1,4 +1,3 @@
-from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from dj_rest_auth.registration.views import RegisterView, SocialLoginView, VerifyEmailView
 from dj_rest_auth.views import LoginView, LogoutView, PasswordResetConfirmView, PasswordResetView
 from django.conf import settings
@@ -16,6 +15,7 @@ from core.serializers import BulkDeleteSerializer
 from core.throttling import UploadThrottleMixin
 
 from . import profile_services, services
+from .adapters import LoggingGoogleOAuth2Adapter
 from .models import ListenHistory, User
 from .serializers import (
     ActivityEntrySerializer,
@@ -29,7 +29,7 @@ from .serializers import (
 
 @extend_schema(tags=["Auth"])
 class GoogleLoginView(SocialLoginView):
-    adapter_class = GoogleOAuth2Adapter
+    adapter_class = LoggingGoogleOAuth2Adapter
 
 
 # Thin subclasses purely to attach an OpenAPI tag: extend_schema() can't wrap
