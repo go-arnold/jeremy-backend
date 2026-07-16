@@ -48,12 +48,11 @@ services:
       # HLS playback — not published to the host, only reachable from the `nginx` container
       # (see nginx.conf's /live-hls/ location), same pattern as the `api` service below.
       - "8888"
+    # The official image is minimal and ships no curl/wget — confirmed manually (`docker compose
+    # logs mediamtx`) that RTMP/HLS/API listeners all start correctly; there's no lightweight
+    # command available inside the container to probe them.
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9997/v3/paths/list || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
+      disable: true
 
   api:
     build:
