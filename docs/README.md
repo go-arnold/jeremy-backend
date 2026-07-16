@@ -11,6 +11,8 @@ Ce fichier fait partie du dossier `docs/` du sous-projet `backend/`. Voir aussi 
 - `docs/docker-production/` — Dockerfile et `docker-compose.yaml` prêts pour la production
 - `docs/DEPLOY.md` et `docs/deploy.sh` — procédure et script de déploiement
 - `docs/FRONTEND_INTEGRATION.md` — guide d'intégration complet pour les frontends (admin et client)
+- `docs/LIVE_STREAMING.md` — guide dédié au live/streaming/temps réel (endpoints, WebSocket,
+  intégration admin et client détaillée)
 
 ---
 
@@ -23,7 +25,7 @@ Ce fichier fait partie du dossier `docs/` du sous-projet `backend/`. Voir aussi 
 5. [Applications Django](#applications-django)
 6. [Authentification](#authentification)
 7. [Temps réel (WebSocket, présence, chat en direct)](#temps-réel-websocket-présence-chat-en-direct)
-8. [Streaming en direct (Cloudflare Stream)](#streaming-en-direct-cloudflare-stream)
+8. [Streaming en direct (MediaMTX, auto-hébergé)](#streaming-en-direct-mediamtx-auto-hébergé)
 9. [Système d'engagement générique](#système-dengagement-générique)
 10. [Page d'accueil agrégée](#page-daccueil-agrégée)
 11. [Recherche (Elasticsearch)](#recherche-elasticsearch)
@@ -56,8 +58,8 @@ musicales, la recherche unifiée, les newsletters, l'analytics, et une page d'ac
 
 Un chantier récent a ajouté trois capacités transversales à la plateforme :
 
-- **Diffusion en direct** (audio et vidéo) via **Cloudflare Stream**, pour la radio, les émissions,
-  le web-tv et le module Live Music.
+- **Diffusion en direct** (audio et vidéo) via **MediaMTX** (auto-hébergé), pour la radio, les
+  émissions, le web-tv et le module Live Music.
 - **Temps réel** (WebSocket) via **Django Channels**, pour le chat en direct et le comptage de
   spectateurs/auditeurs en ligne ("presence").
 - **Engagement générique** (j'aime / commentaire / partage / enregistrer pour plus tard),
@@ -94,7 +96,7 @@ Un chantier récent a ajouté trois capacités transversales à la plateforme :
 | Serveur ASGI (dev) | `daphne` (déclenché automatiquement par `manage.py runserver`) | |
 | Authentification | SimpleJWT (access 15 min / refresh 7 jours) + Google OAuth (`django-allauth`, `dj-rest-auth`) | |
 | Stockage média | Cloudinary | Images, audio, vidéo non-live |
-| Diffusion en direct | Cloudflare Stream | Ingestion RTMPS, lecture HLS/DASH |
+| Diffusion en direct | MediaMTX (auto-hébergé) | Ingestion RTMP, lecture HLS |
 | Recherche | Elasticsearch via `django-elasticsearch-dsl` | Resynchronisation planifiée (pas de signal temps réel, volontairement) |
 | Documentation API | `drf-spectacular` | ReDoc + Swagger UI + schéma OpenAPI |
 | Tests | `pytest-django`, `factory-boy` | Voir la section [Tests](#tests) pour une limitation connue |
@@ -115,7 +117,7 @@ backend/
 │   ├── wsgi.py
 │   └── celery.py
 ├── settings/
-│   ├── base.py                ← configuration commune (apps, cache, Celery, Channels, Cloudflare...)
+│   ├── base.py                ← configuration commune (apps, cache, Celery, Channels, MediaMTX...)
 │   ├── local.py                ← DEBUG=True, cache LocMemCache (pas de Redis local requis)
 │   └── production.py          ← sécurité stricte, e-mails SMTP
 ├── core/                      ← utilitaires transverses réutilisables
@@ -140,7 +142,7 @@ backend/
     ├── live_music/               Diffusion musicale en direct indépendante + grille + chat
     ├── engagement/                J'aime / commentaire / partage / enregistrer — générique
     ├── realtime/                  Channels : WebSocket, présence, modèle de chat générique
-    ├── streaming/                 Client Cloudflare Stream, webhook, champs live réutilisables
+    ├── streaming/                 Intégration MediaMTX, webhook, champs live réutilisables
     ├── home/                      Page d'accueil agrégée (bannière, à la une, hits, magazine)
     ├── analytics/                 Tableau de bord de statistiques globales
     ├── newsletter/                Abonnement/désabonnement, campagnes
@@ -166,15 +168,15 @@ métier et requêtes), `tasks.py` (tâches Celery), `admin.py`, `urls.py`, `test
 | `articles` | Articles (blog et magazine), catégories, tags, commentaires dédiés | `/api/v1/articles/` |
 | `events` | Événements, villes, grille horaire, inscriptions | `/api/v1/events/` |
 | `podcasts` | Séries et épisodes (audio Cloudinary ou URL externe) | `/api/v1/podcasts/` |
-| `radio` | Grille hebdomadaire, direct, chat, diffusion Cloudflare | `/api/v1/radio/` |
+| `radio` | Grille hebdomadaire, direct, chat, diffusion MediaMTX | `/api/v1/radio/` |
 | `webtv` | Catalogue vidéo par catégorie + vidéo en direct + chat | `/api/v1/webtv/` |
 | `community` | Posts (dont soumission de talents), défis, sondages | `/api/v1/community/` |
 | `releases` | Sorties musicales (source canonique) | `/api/v1/releases/` |
-| `emissions` | Émissions live programmées (audio/vidéo), diffusion Cloudflare | `/api/v1/emissions/` |
+| `emissions` | Émissions live programmées (audio/vidéo), diffusion MediaMTX | `/api/v1/emissions/` |
 | `live_music` | Session live indépendante + grille de programmes + chat | `/api/v1/live_music/` |
 | `engagement` | J'aime, commentaire, partage, enregistrement — génériques | monté en actions sur les ViewSets consommateurs |
 | `realtime` | Consommateur WebSocket, présence Redis, modèle de chat générique | `ws/live/<room_type>/<room_id>/` |
-| `streaming` | Client Cloudflare Stream et réception de webhook | `/api/v1/streaming/` |
+| `streaming` | Intégration MediaMTX et réception de webhook | `/api/v1/streaming/` |
 | `home` | Agrégation de la page d'accueil | `/api/v1/home/` |
 | `analytics` | Tableau de bord de statistiques | `/api/v1/analytics/` |
 | `newsletter` | Abonnements et campagnes | `/api/v1/newsletter/` |
@@ -247,46 +249,48 @@ développement. En production, ce n'est **pas** `daphne` qui sert l'application 
 `entrypoint.sh` / `docs/docker-production/Dockerfile`), mais **Gunicorn avec un worker
 `uvicorn.workers.UvicornWorker`**, pointé directement sur `artdukivu.asgi:application`.
 
-## Streaming en direct (Cloudflare Stream)
+## Streaming en direct (MediaMTX, auto-hébergé)
 
 Le stockage média classique (images, audio de podcast, vidéos non-live) reste sur **Cloudinary**.
-Le **direct** (audio et vidéo) utilise **Cloudflare Stream** :
+Le **direct** (audio et vidéo) utilise **MediaMTX**, un serveur média open source auto-hébergé
+(remplace Cloudflare Stream, qui ne parvenait pas à maintenir une ingestion RTMPS stable) :
 
-- `apps.streaming.client` — client HTTP minimal (`requests`) vers l'API Cloudflare Stream
-  (`Live Inputs`) : création (`create_live_input`), lecture de statut (`get_live_input`),
-  suppression (`delete_live_input`), construction des URLs de lecture HLS/DASH
-  (`build_playback_urls`, basées sur `CLOUDFLARE_CUSTOMER_HOSTNAME`).
-- `apps.streaming.fields.CloudflareLiveFields` — mixin de modèle abstrait apportant les champs
-  `cf_live_input_uid`, `cf_rtmps_url`, `cf_rtmps_key` (jamais exposé publiquement, réservé aux
-  admins), `cf_playback_hls_url`, `cf_playback_dash_url`, `live_started_at`. Hérité par
-  `Emission`, `RadioProgram`, `WebTVVideo`, `MusicLiveSession`.
-- `apps.streaming.services.start_live_input(name)` / `stop_live_input(uid)` — fonctions
+- `apps.streaming.client` — `build_playback_url(stream_key)` (construit l'URL HLS à partir de
+  `MEDIAMTX_HLS_BASE_URL`) et `kick_publisher(stream_key)` (déconnexion forcée best-effort via
+  l'API MediaMTX, utilisée par `end_live`).
+- `apps.streaming.fields.LiveStreamFields` — mixin de modèle abstrait apportant les champs
+  `stream_key` (sert à la fois de nom de chemin RTMP et de secret — le "Stream key" à donner à
+  OBS), `playback_hls_url`, `live_started_at`. Hérité par `Emission`, `RadioProgram`, `WebTVVideo`,
+  `MusicLiveSession`.
+- `apps.streaming.services.start_live_input(name)` / `stop_live_input(key)` — fonctions
   génériques appelées par le `services.py` de chaque app consommatrice (`start_live` /
   `end_live`), qui gèrent en plus leur propre champ de statut (`status="live"` ou `is_live=True`
-  selon le modèle).
+  selon le modèle). Contrairement à Cloudflare, MediaMTX n'a aucune notion de "live input" créé à
+  l'avance : un chemin RTMP existe dès qu'un diffuseur y publie, et disparaît dès qu'il se
+  déconnecte — rien à créer, rien qui puisse rester dans un état distant cassé.
 - **Actions d'administration** `POST .../<id>/go_live/` et `POST .../<id>/end_live/`
   (`IsAdminUser` uniquement) sur `EmissionViewSet`, `RadioProgramViewSet`, `WebTVVideoViewSet`,
-  `MusicLiveSessionViewSet`. `go_live` renvoie les identifiants RTMPS à donner au logiciel de
-  diffusion (OBS ou équivalent) ; ces champs ne sont **jamais** renvoyés par les endpoints publics
-  de lecture.
-- **Webhook** `POST /api/v1/streaming/webhook/` — reçoit les événements
-  `live_input.connected` / `live_input.disconnected` de Cloudflare, vérifie la signature HMAC-SHA256
-  (en-tête `Webhook-Signature`, secret `CLOUDFLARE_WEBHOOK_SECRET`), puis bascule automatiquement
-  le statut de la ressource correspondante (retrouvée par `cf_live_input_uid`). C'est le signal
-  fiable de "le diffuseur est réellement connecté", indépendant de l'intention déclarée par
-  l'action `go_live`.
+  `MusicLiveSessionViewSet`. `go_live` renvoie `rtmp_server_url` (constante, depuis
+  `MEDIAMTX_RTMP_SERVER_URL`) et `stream_key` — exactement les deux champs "Serveur"/"Clé de
+  flux" attendus par OBS en mode RTMP personnalisé ; ces champs ne sont **jamais** renvoyés par
+  les endpoints publics de lecture.
+- **Webhook** `POST /api/v1/streaming/mediamtx-webhook/` — reçoit les hooks `runOnReady` /
+  `runOnNotReady` de MediaMTX (configurés dans `mediamtx.yml`), authentifiés par un secret
+  partagé (`X-Internal-Secret`, comparé avec `hmac.compare_digest`) plutôt qu'une signature
+  HMAC+horodatage : cet appel ne quitte jamais le réseau Docker privé, contrairement à l'ancien
+  webhook Cloudflare qui devait se défendre contre du trafic public. Bascule automatiquement le
+  statut de la ressource correspondante (retrouvée par `stream_key`).
 
-### Configuration du webhook Cloudflare Stream
+### Configuration de MediaMTX
 
-```bash
-curl -X PUT \
-  "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/stream/webhook" \
-  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-  -H "Content-Type: application/json" \
-  --data '{"notificationUrl": "https://<domaine-backend>/api/v1/streaming/webhook/"}'
-```
+Voir `docs/vps-deployment/mediamtx.yml` (ou `docs/docker-production/mediamtx.yml`) pour la config
+complète (RTMP, HLS, hooks). Le port RTMP (1935) doit être ouvert publiquement — c'est la seule
+exception délibérée à la règle "pas de port public" appliquée au reste de la pile ; le secret est
+le `stream_key` lui-même, pas l'isolation réseau.
 
-Le secret renvoyé par cet appel doit être copié dans `CLOUDFLARE_WEBHOOK_SECRET` (`.env`).
+**Voir `docs/LIVE_STREAMING.md`** pour la référence complète des endpoints des 4 surfaces live
+(Émissions, Radio, Web TV, Live Music), le WebSocket (présence + chat), et des guides
+d'intégration détaillés côté `frontend_admin` et `frontend_client`.
 
 ## Système d'engagement générique
 
@@ -447,7 +451,7 @@ voir `docs/FRONTEND_INTEGRATION.md`. Aperçu des préfixes :
 /api/v1/releases/                    sorties musicales (+ engagement)
 /api/v1/emissions/                   émissions live (+ engagement, go_live/end_live)
 /api/v1/live_music/                   session live, grille de programmes, chat
-/api/v1/streaming/                    webhook Cloudflare Stream
+/api/v1/streaming/                    webhook MediaMTX (mediamtx-webhook/)
 /api/v1/home/                          page d'accueil agrégée
 /api/v1/analytics/                      tableau de bord de statistiques
 /api/v1/newsletter/                      abonnement, campagnes
@@ -463,7 +467,7 @@ Voir `.env.example` pour la liste exhaustive. Catégories principales :
 |---|---|
 | Base de données | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` |
 | Cloudinary | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` |
-| Cloudflare Stream | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_CUSTOMER_HOSTNAME`, `CLOUDFLARE_WEBHOOK_SECRET` |
+| MediaMTX (streaming) | `MEDIAMTX_RTMP_SERVER_URL`, `MEDIAMTX_HLS_BASE_URL`, `MEDIAMTX_API_URL`, `MEDIAMTX_WEBHOOK_SECRET` |
 | Redis | `REDIS_URL` (cache prod, Celery, Channels, présence) |
 | Auth | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SECRET_KEY` |
 | E-mail | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL` |

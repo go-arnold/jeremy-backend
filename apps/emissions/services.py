@@ -25,7 +25,7 @@ def get_live_emission():
 
 @transaction.atomic
 def start_live(emission: Emission) -> Emission:
-    fields = streaming_services.start_live_input(emission.title, existing_uid=emission.cf_live_input_uid)
+    fields = streaming_services.start_live_input(emission.title, existing_key=emission.stream_key)
     for attr, value in fields.items():
         setattr(emission, attr, value)
     emission.status = Emission.STATUS_LIVE
@@ -36,9 +36,9 @@ def start_live(emission: Emission) -> Emission:
 
 @transaction.atomic
 def end_live(emission: Emission) -> Emission:
-    streaming_services.stop_live_input(emission.cf_live_input_uid)
+    streaming_services.stop_live_input(emission.stream_key)
     emission.status = Emission.STATUS_RECORDED
-    emission.cf_live_input_uid = ""
+    emission.stream_key = ""
     emission.save()
     cache.delete(LIVE_KEY)
     return emission

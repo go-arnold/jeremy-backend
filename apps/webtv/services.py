@@ -22,7 +22,7 @@ def get_premiers(limit: int = 5) -> list:
 
 @transaction.atomic
 def start_live(video: WebTVVideo) -> WebTVVideo:
-    fields = streaming_services.start_live_input(video.title, existing_uid=video.cf_live_input_uid)
+    fields = streaming_services.start_live_input(video.title, existing_key=video.stream_key)
     for attr, value in fields.items():
         setattr(video, attr, value)
     video.is_live = True
@@ -32,9 +32,9 @@ def start_live(video: WebTVVideo) -> WebTVVideo:
 
 @transaction.atomic
 def end_live(video: WebTVVideo) -> WebTVVideo:
-    streaming_services.stop_live_input(video.cf_live_input_uid)
+    streaming_services.stop_live_input(video.stream_key)
     video.is_live = False
-    video.cf_live_input_uid = ""
+    video.stream_key = ""
     video.save()
     return video
 

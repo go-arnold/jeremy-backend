@@ -1,3 +1,4 @@
+from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action
@@ -85,9 +86,9 @@ class WebTVVideoViewSet(UploadThrottleMixin, EngagementActionsMixin, LiveChatVie
         return Response(
             {
                 "is_live": video.is_live,
-                "cf_rtmps_url": video.cf_rtmps_url,
-                "cf_rtmps_key": video.cf_rtmps_key,
-                "cf_playback_hls_url": video.cf_playback_hls_url,
+                "rtmp_server_url": settings.MEDIAMTX_RTMP_SERVER_URL,
+                "stream_key": video.stream_key,
+                "playback_hls_url": video.playback_hls_url,
             }
         )
 

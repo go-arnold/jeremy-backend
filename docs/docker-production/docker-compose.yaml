@@ -32,6 +32,29 @@ services:
       retries: 10
       start_period: 30s
 
+  mediamtx:
+    image: bluenviron/mediamtx:v1.19.2
+    restart: unless-stopped
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    environment:
+      MEDIAMTX_WEBHOOK_SECRET: ${MEDIAMTX_WEBHOOK_SECRET}
+    ports:
+      # RTMP ingest must be reachable directly from the public internet (broadcasters connect
+      # from outside Docker entirely) — the secret is the stream_key itself, not network
+      # isolation, same trust boundary Cloudflare's own RTMPS endpoint had.
+      - "1935:1935"
+    expose:
+      # HLS playback — not published to the host, only reachable from the `nginx` container
+      # (see nginx.conf's /live-hls/ location), same pattern as the `api` service below.
+      - "8888"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9997/v3/paths/list || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   api:
     build:
       context: ../..

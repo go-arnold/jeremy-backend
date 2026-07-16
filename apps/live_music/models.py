@@ -2,7 +2,7 @@ from cloudinary.models import CloudinaryField
 from django.db import models
 
 from apps.engagement.models import Engageable
-from apps.streaming.fields import CloudflareLiveFields
+from apps.streaming.fields import LiveStreamFields
 
 DAY_CHOICES = [
     (i, day)
@@ -10,7 +10,7 @@ DAY_CHOICES = [
 ]
 
 
-class MusicLiveSession(CloudflareLiveFields, Engageable):
+class MusicLiveSession(LiveStreamFields, Engageable):
     """The 'Son en direct' — an independent live-music broadcast (not tied to Radio/Emissions)."""
 
     STATUS_LIVE = "live"

@@ -1,53 +1,16 @@
 import requests
 from django.conf import settings
 
-BASE_URL = "https://api.cloudflare.com/client/v4"
+
+def build_playback_url(stream_key: str) -> str:
+    return f"{settings.MEDIAMTX_HLS_BASE_URL}/live/{stream_key}/index.m3u8"
 
 
-def _headers() -> dict:
-    return {
-        "Authorization": f"Bearer {settings.CLOUDFLARE_API_TOKEN}",
-        "Content-Type": "application/json",
-    }
-
-
-def _live_inputs_url(suffix: str = "") -> str:
-    return f"{BASE_URL}/accounts/{settings.CLOUDFLARE_ACCOUNT_ID}/stream/live_inputs{suffix}"
-
-
-def create_live_input(name: str) -> dict:
-    response = requests.post(
-        _live_inputs_url(),
-        json={"meta": {"name": name}, "recording": {"mode": "automatic"}},
-        headers=_headers(),
-        timeout=10,
-    )
-    response.raise_for_status()
-    return response.json()["result"]
-
-
-def get_live_input(uid: str) -> dict | None:
-    """Returns None if the live input doesn't exist (deleted, expired, or never existed) rather
-    than raising — callers use this to decide whether an existing uid can still be reused."""
-    response = requests.get(_live_inputs_url(f"/{uid}"), headers=_headers(), timeout=10)
-    if response.status_code == 404:
-        return None
-    response.raise_for_status()
-    data = response.json()
-    if not data.get("success"):
-        return None
-    return data["result"]
-
-
-def delete_live_input(uid: str) -> None:
-    response = requests.delete(_live_inputs_url(f"/{uid}"), headers=_headers(), timeout=10)
-    if response.status_code not in (200, 204, 404):
-        response.raise_for_status()
-
-
-def build_playback_urls(uid: str) -> tuple[str, str]:
-    host = settings.CLOUDFLARE_CUSTOMER_HOSTNAME
-    return (
-        f"https://{host}/{uid}/manifest/video.m3u8",
-        f"https://{host}/{uid}/manifest/video.mpd",
-    )
+def kick_publisher(stream_key: str) -> None:
+    """Best-effort force-disconnect of an active publisher via MediaMTX's HTTP API. Never
+    raises: there may be no active publisher (nothing to kick), or the API may be briefly
+    unreachable — either way `end_live` must still succeed on our own DB state."""
+    try:
+        requests.post(f"{settings.MEDIAMTX_API_URL}/v3/paths/kick/live/{stream_key}", timeout=5)
+    except requests.RequestException:
+        pass

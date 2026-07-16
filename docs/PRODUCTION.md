@@ -17,10 +17,9 @@ Indépendamment de l'hébergement choisi, la mise en production nécessite dans 
 3. **Elasticsearch** joignable (cluster managé recommandé — Elastic Cloud, AWS OpenSearch — ou
    conteneur auto-hébergé, voir `docs/docker-production/docker-compose.yaml`).
 4. **Cloudinary** configuré (stockage média non-live).
-5. **Cloudflare Stream** configuré (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
-   `CLOUDFLARE_CUSTOMER_HOSTNAME`, `CLOUDFLARE_WEBHOOK_SECRET`), avec le webhook Cloudflare
-   pointé vers `https://<domaine>/api/v1/streaming/webhook/` (voir `docs/README.md`, section
-   Streaming en direct).
+5. **MediaMTX** déployé (auto-hébergé, voir `docs/docker-production/mediamtx.yml`), avec
+   `MEDIAMTX_RTMP_SERVER_URL`, `MEDIAMTX_HLS_BASE_URL`, `MEDIAMTX_WEBHOOK_SECRET` renseignés et
+   le port RTMP (1935) ouvert publiquement (voir `docs/README.md`, section Streaming en direct).
 6. **Un serveur ASGI capable de gérer le WebSocket**, pas seulement WSGI. Le projet est configuré
    pour tourner avec `gunicorn -k uvicorn.workers.UvicornWorker` contre `artdukivu.asgi:application`
    (voir `entrypoint.sh` et `docs/docker-production/Dockerfile`). Servir uniquement

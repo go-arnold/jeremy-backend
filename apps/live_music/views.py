@@ -1,3 +1,4 @@
+from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action
@@ -52,9 +53,9 @@ class MusicLiveSessionViewSet(EngagementActionsMixin, LiveChatViewSetMixin, Mode
         return Response(
             {
                 "status": session.status,
-                "cf_rtmps_url": session.cf_rtmps_url,
-                "cf_rtmps_key": session.cf_rtmps_key,
-                "cf_playback_hls_url": session.cf_playback_hls_url,
+                "rtmp_server_url": settings.MEDIAMTX_RTMP_SERVER_URL,
+                "stream_key": session.stream_key,
+                "playback_hls_url": session.playback_hls_url,
             }
         )
 

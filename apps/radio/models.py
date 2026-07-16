@@ -2,10 +2,10 @@ from cloudinary.models import CloudinaryField
 from django.conf import settings
 from django.db import models
 
-from apps.streaming.fields import CloudflareLiveFields
+from apps.streaming.fields import LiveStreamFields
 
 
-class RadioProgram(CloudflareLiveFields):
+class RadioProgram(LiveStreamFields):
     STATUS_LIVE = "live"
     STATUS_UPCOMING = "upcoming"
     STATUS_ENDED = "ended"
