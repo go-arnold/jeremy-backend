@@ -210,7 +210,6 @@ MEDIAMTX_HLS_BASE_URL = config(
     "MEDIAMTX_HLS_BASE_URL", default=""
 )  # public, e.g. https://art-du-kivu-api.kelor.tech/live-hls
 MEDIAMTX_API_URL = config("MEDIAMTX_API_URL", default="http://mediamtx:9997")  # internal Docker DNS only
-MEDIAMTX_WEBHOOK_SECRET = config("MEDIAMTX_WEBHOOK_SECRET", default="")
 
 # ── Elasticsearch ─────────────────────────────────────────────────────────────
 # Point at a managed cluster (Elastic Cloud, AWS OpenSearch, ...) in production
@@ -270,6 +269,10 @@ CELERY_BEAT_SCHEDULE = {
     "resync-search-index": {
         "task": "apps.search.tasks.resync_search_index",
         "schedule": 300,
+    },
+    "sync-live-status": {
+        "task": "apps.streaming.tasks.sync_live_status",
+        "schedule": 15,
     },
 }
 
@@ -396,7 +399,6 @@ SPECTACULAR_SETTINGS = {
         {"name": "Newsletter", "description": "Subscribe/unsubscribe and admin campaign sending"},
         {"name": "Search", "description": "Unified full-text search across all content types"},
         {"name": "Home", "description": "Aggregated homepage payload"},
-        {"name": "Streaming", "description": "MediaMTX (self-hosted) live ingest control and webhooks"},
         {"name": "Live Music", "description": "Live music session, schedule grid and live chat"},
         {"name": "Media", "description": "Signed direct-to-Cloudinary upload for audio/video/image"},
         {"name": "Gamification", "description": "Badges, consumption tracking, media ranking"},

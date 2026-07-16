@@ -18,17 +18,14 @@ plateforme managée (PaaS).
 - [ ] Compte Cloudinary configuré (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
       `CLOUDINARY_API_SECRET`).
 - [ ] MediaMTX déployé (auto-hébergé, `docs/docker-production/mediamtx.yml`) avec
-      `MEDIAMTX_RTMP_SERVER_URL`, `MEDIAMTX_HLS_BASE_URL`, `MEDIAMTX_WEBHOOK_SECRET` renseignés,
-      et le port RTMP (1935) ouvert publiquement.
+      `MEDIAMTX_RTMP_SERVER_URL`, `MEDIAMTX_HLS_BASE_URL` renseignés, et le port RTMP (1935)
+      ouvert publiquement. Le statut live est détecté par une tâche Celery qui interroge l'API
+      MediaMTX toutes les 15s (`apps.streaming.tasks.sync_live_status`) — pas de webhook, pas de
+      secret à configurer pour ça.
 - [ ] Nom de domaine et certificat TLS prêts (ou plateforme gérant le TLS automatiquement).
 - [ ] `ALLOWED_HOSTS` et `CORS_ALLOWED_ORIGINS` renseignés avec les domaines réels (frontend admin
       et frontend client).
 - [ ] `.env` complet et copié à l'emplacement attendu (racine de `backend/` — voir `.env.example`).
-
-**Note** : contrairement à l'ancienne intégration Cloudflare Stream, `MEDIAMTX_WEBHOOK_SECRET`
-n'est pas fourni par un tiers — c'est une valeur que tu choisis toi-même (ex. `python3 -c
-"import secrets; print(secrets.token_urlsafe(32))"`), reportée à l'identique dans `mediamtx.yml`.
-Elle peut donc être définie dès le premier déploiement, sans dépendre du domaine déjà joignable.
 
 ## 2. Option Docker (auto-hébergé)
 

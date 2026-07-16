@@ -142,7 +142,7 @@ backend/
     ├── live_music/               Diffusion musicale en direct indépendante + grille + chat
     ├── engagement/                J'aime / commentaire / partage / enregistrer — générique
     ├── realtime/                  Channels : WebSocket, présence, modèle de chat générique
-    ├── streaming/                 Intégration MediaMTX, webhook, champs live réutilisables
+    ├── streaming/                 Intégration MediaMTX, sondage de statut, champs live réutilisables
     ├── home/                      Page d'accueil agrégée (bannière, à la une, hits, magazine)
     ├── analytics/                 Tableau de bord de statistiques globales
     ├── newsletter/                Abonnement/désabonnement, campagnes
@@ -176,7 +176,7 @@ métier et requêtes), `tasks.py` (tâches Celery), `admin.py`, `urls.py`, `test
 | `live_music` | Session live indépendante + grille de programmes + chat | `/api/v1/live_music/` |
 | `engagement` | J'aime, commentaire, partage, enregistrement — génériques | monté en actions sur les ViewSets consommateurs |
 | `realtime` | Consommateur WebSocket, présence Redis, modèle de chat générique | `ws/live/<room_type>/<room_id>/` |
-| `streaming` | Intégration MediaMTX et réception de webhook | `/api/v1/streaming/` |
+| `streaming` | Intégration MediaMTX (idempotence, sondage de statut) | pas d'endpoint HTTP propre |
 | `home` | Agrégation de la page d'accueil | `/api/v1/home/` |
 | `analytics` | Tableau de bord de statistiques | `/api/v1/analytics/` |
 | `newsletter` | Abonnements et campagnes | `/api/v1/newsletter/` |
@@ -274,17 +274,18 @@ Le **direct** (audio et vidéo) utilise **MediaMTX**, un serveur média open sou
   `MEDIAMTX_RTMP_SERVER_URL`) et `stream_key` — exactement les deux champs "Serveur"/"Clé de
   flux" attendus par OBS en mode RTMP personnalisé ; ces champs ne sont **jamais** renvoyés par
   les endpoints publics de lecture.
-- **Webhook** `POST /api/v1/streaming/mediamtx-webhook/` — reçoit les hooks `runOnReady` /
-  `runOnNotReady` de MediaMTX (configurés dans `mediamtx.yml`), authentifiés par un secret
-  partagé (`X-Internal-Secret`, comparé avec `hmac.compare_digest`) plutôt qu'une signature
-  HMAC+horodatage : cet appel ne quitte jamais le réseau Docker privé, contrairement à l'ancien
-  webhook Cloudflare qui devait se défendre contre du trafic public. Bascule automatiquement le
-  statut de la ressource correspondante (retrouvée par `stream_key`).
+- **Détection du statut live — par sondage, pas par webhook.** `apps.streaming.tasks.
+  sync_live_status` (tâche Celery, toutes les 15s via `CELERY_BEAT_SCHEDULE`) interroge l'API
+  MediaMTX (`GET /v3/paths/list`, `apps.streaming.client.list_ready_stream_keys`) et bascule le
+  statut de toute ressource dont le `stream_key` est/n'est plus publié. L'image officielle
+  MediaMTX est `FROM scratch` (aucun shell, aucun `curl`/`wget`) — elle ne peut donc pas exécuter
+  de hook `runOnReady`/`runOnNotReady` pour nous notifier activement ; sonder son API ne dépend
+  que du serveur HTTP natif de MediaMTX, présent même dans une image minimale.
 
 ### Configuration de MediaMTX
 
 Voir `docs/vps-deployment/mediamtx.yml` (ou `docs/docker-production/mediamtx.yml`) pour la config
-complète (RTMP, HLS, hooks). Le port RTMP (1935) doit être ouvert publiquement — c'est la seule
+complète (RTMP, HLS, API). Le port RTMP (1935) doit être ouvert publiquement — c'est la seule
 exception délibérée à la règle "pas de port public" appliquée au reste de la pile ; le secret est
 le `stream_key` lui-même, pas l'isolation réseau.
 
@@ -370,6 +371,7 @@ lorsque l'URL est en `rediss://`.
 | `apps.radio.tasks.cleanup_old_chat` | 24 h | purge les messages de chat radio de plus de 7 jours |
 | `apps.emissions.tasks.update_emission_statuses` | 1 h | scheduled → live → recorded |
 | `apps.search.tasks.resync_search_index` | 5 min | resynchronise les index Elasticsearch |
+| `apps.streaming.tasks.sync_live_status` | 15 s | détecte connexion/déconnexion RTMP via l'API MediaMTX |
 
 Les compteurs de vues/écoutes (`view_count`, `play_count`) sont incrémentés de façon asynchrone
 pour ne jamais bloquer la réponse HTTP.
@@ -451,7 +453,6 @@ voir `docs/FRONTEND_INTEGRATION.md`. Aperçu des préfixes :
 /api/v1/releases/                    sorties musicales (+ engagement)
 /api/v1/emissions/                   émissions live (+ engagement, go_live/end_live)
 /api/v1/live_music/                   session live, grille de programmes, chat
-/api/v1/streaming/                    webhook MediaMTX (mediamtx-webhook/)
 /api/v1/home/                          page d'accueil agrégée
 /api/v1/analytics/                      tableau de bord de statistiques
 /api/v1/newsletter/                      abonnement, campagnes
@@ -467,7 +468,7 @@ Voir `.env.example` pour la liste exhaustive. Catégories principales :
 |---|---|
 | Base de données | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` |
 | Cloudinary | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` |
-| MediaMTX (streaming) | `MEDIAMTX_RTMP_SERVER_URL`, `MEDIAMTX_HLS_BASE_URL`, `MEDIAMTX_API_URL`, `MEDIAMTX_WEBHOOK_SECRET` |
+| MediaMTX (streaming) | `MEDIAMTX_RTMP_SERVER_URL`, `MEDIAMTX_HLS_BASE_URL`, `MEDIAMTX_API_URL` |
 | Redis | `REDIS_URL` (cache prod, Celery, Channels, présence) |
 | Auth | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SECRET_KEY` |
 | E-mail | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL` |

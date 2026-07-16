@@ -37,8 +37,6 @@ services:
     restart: unless-stopped
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
-    environment:
-      MEDIAMTX_WEBHOOK_SECRET: ${MEDIAMTX_WEBHOOK_SECRET}
     ports:
       # RTMP ingest must be reachable directly from the public internet (broadcasters connect
       # from outside Docker entirely) — the secret is the stream_key itself, not network

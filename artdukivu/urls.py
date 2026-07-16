@@ -66,7 +66,6 @@ urlpatterns = [
     path("api/v1/newsletter/", include("apps.newsletter.urls")),
     path("api/v1/search/", include("apps.search.urls")),
     path("api/v1/live_music/", include("apps.live_music.urls")),
-    path("api/v1/streaming/", include("apps.streaming.urls")),
     path("api/v1/media/", include("apps.media_uploads.urls")),
     path("api/v1/gamification/", include("apps.gamification.urls")),
 ]

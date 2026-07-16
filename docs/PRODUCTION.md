@@ -18,8 +18,10 @@ Indépendamment de l'hébergement choisi, la mise en production nécessite dans 
    conteneur auto-hébergé, voir `docs/docker-production/docker-compose.yaml`).
 4. **Cloudinary** configuré (stockage média non-live).
 5. **MediaMTX** déployé (auto-hébergé, voir `docs/docker-production/mediamtx.yml`), avec
-   `MEDIAMTX_RTMP_SERVER_URL`, `MEDIAMTX_HLS_BASE_URL`, `MEDIAMTX_WEBHOOK_SECRET` renseignés et
-   le port RTMP (1935) ouvert publiquement (voir `docs/README.md`, section Streaming en direct).
+   `MEDIAMTX_RTMP_SERVER_URL`, `MEDIAMTX_HLS_BASE_URL` renseignés et le port RTMP (1935) ouvert
+   publiquement (voir `docs/README.md`, section Streaming en direct). Le statut live est détecté
+   par une tâche Celery qui interroge l'API MediaMTX toutes les 15s — vérifie que `worker` et
+   `beat` tournent bien tous les deux.
 6. **Un serveur ASGI capable de gérer le WebSocket**, pas seulement WSGI. Le projet est configuré
    pour tourner avec `gunicorn -k uvicorn.workers.UvicornWorker` contre `artdukivu.asgi:application`
    (voir `entrypoint.sh` et `docs/docker-production/Dockerfile`). Servir uniquement

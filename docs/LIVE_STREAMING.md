@@ -11,7 +11,7 @@ qui construit l'intégration live côté `frontend_admin` et `frontend_client`.
 1. [Vue d'ensemble et architecture](#vue-densemble-et-architecture)
 2. [Concepts clés](#concepts-clés)
 3. [Référence des endpoints — les 4 surfaces live](#référence-des-endpoints--les-4-surfaces-live)
-4. [Webhook MediaMTX (interne, à ne pas appeler depuis un frontend)](#webhook-mediamtx-interne-à-ne-pas-appeler-depuis-un-frontend)
+4. [Détection du statut live (interne, rien à appeler depuis un frontend)](#détection-du-statut-live-interne-rien-à-appeler-depuis-un-frontend)
 5. [Temps réel : WebSocket (présence + chat)](#temps-réel-websocket-présence--chat)
 6. [Engagement sur le contenu live](#engagement-sur-le-contenu-live)
 7. [Intégration côté admin (frontend_admin)](#intégration-côté-admin-frontend_admin)
@@ -28,7 +28,7 @@ qui construit l'intégration live côté `frontend_admin` et `frontend_client`.
    OBS Studio  ──RTMP──▶ │      MediaMTX        │ ──HLS──▶  frontend_client (lecteur vidéo/audio)
   (ou équivalent)        │  (auto-hébergé)      │
                          └──────────┬───────────┘
-                                    │ runOnReady / runOnNotReady (webhook interne)
+                                    │ sondé toutes les 15s (GET /v3/paths/list)
                                     ▼
                          ┌─────────────────────┐
                          │   Django API (api)   │ ◀──WebSocket (ws/live/...)── frontend_client
@@ -47,10 +47,13 @@ qui construit l'intégration live côté `frontend_admin` et `frontend_client`.
   `docs/README.md` section "Streaming en direct" pour le détail de l'infrastructure.
 - **Lecture** : MediaMTX ré-encode le flux en HLS, servi sous `/live-hls/live/<clé>/index.m3u8`
   sur le même domaine que l'API (HTTPS, pas de port séparé côté client).
-- **Statut** : quand OBS se connecte/déconnecte, MediaMTX appelle automatiquement un webhook
-  interne qui bascule le statut de la ressource (`Emission`, `RadioProgram`, `WebTVVideo`,
-  `MusicLiveSession`) en base — **le frontend n'a jamais besoin d'appeler ce webhook**, il lit
-  simplement le champ `status`/`is_live` de la ressource.
+- **Statut** : une tâche Celery (`apps.streaming.tasks.sync_live_status`, toutes les 15s)
+  interroge l'API MediaMTX pour savoir quels `stream_key` sont réellement en train d'être
+  publiés, et bascule le statut de la ressource correspondante (`Emission`, `RadioProgram`,
+  `WebTVVideo`, `MusicLiveSession`) en base — **le frontend n'a jamais besoin d'appeler quoi que
+  ce soit pour ça**, il lit simplement le champ `status`/`is_live` de la ressource. Un délai de
+  quelques secondes entre la connexion/déconnexion réelle d'OBS et la mise à jour du statut est
+  donc normal.
 - **Présence + chat** : indépendants de MediaMTX, gérés par Django Channels
   (`apps.realtime`) — un salon WebSocket par surface live, avec un compteur de spectateurs et
   un flux de messages.
@@ -133,12 +136,14 @@ Préfixes réels et particularités par surface :
 - Toutes les actions d'engagement disponibles.
 - Room WebSocket : `room_type="live_music"`, `room_id=<pk numérique de la session>`.
 
-## Webhook MediaMTX (interne, à ne pas appeler depuis un frontend)
+## Détection du statut live (interne, rien à appeler depuis un frontend)
 
-`POST /api/v1/streaming/mediamtx-webhook/` — appelé **uniquement** par MediaMTX lui-même
-(configuré dans `mediamtx.yml`), jamais par un frontend. Authentifié par un secret partagé
-interne, invisible depuis l'extérieur du réseau Docker. Mentionné ici uniquement pour que
-l'équipe frontend comprenne pourquoi `status`/`is_live` se met à jour tout seul sans qu'aucun
+Il n'y a **aucun webhook** — l'image officielle MediaMTX est `FROM scratch` (aucun shell, aucun
+`curl`/`wget` dedans), donc elle ne peut exécuter aucune commande pour nous notifier activement.
+À la place, une tâche Celery (`apps.streaming.tasks.sync_live_status`, toutes les 15s) interroge
+l'API MediaMTX (`GET /v3/paths/list`) et bascule automatiquement le statut de la ressource
+correspondante. Mentionné ici uniquement pour que l'équipe frontend comprenne pourquoi
+`status`/`is_live` se met à jour tout seul, avec un délai de quelques secondes, sans qu'aucun
 appel explicite ne soit nécessaire de leur côté.
 
 ## Temps réel : WebSocket (présence + chat)
@@ -241,12 +246,13 @@ function GoLiveButton({ resourcePath, id, status }: { resourcePath: string; id: 
 }
 ```
 
-**Attendre la vraie connexion** : `status`/`is_live` ne passe à "live" qu'une fois MediaMTX
-confirme qu'OBS a réellement commencé à publier (via le webhook interne) — pas au moment où
-l'admin clique sur "Démarrer". Il y a donc un court délai entre le clic et le vrai passage en
-direct. Le panneau admin doit soit re-poller la ressource (`GET /{préfixe}/{id}/`) toutes les
-quelques secondes après `go_live`, soit se connecter au WebSocket du salon et attendre — le champ
-`status`/`is_live` de la ressource reste la source de vérité.
+**`status`/`is_live` passe à "live" dès `go_live`** (intention de l'admin), et la tâche de
+sondage (toutes les 15s) le confirme dès qu'elle détecte qu'OBS publie réellement. Un délai de
+grâce de 45s après `go_live` empêche la tâche de repasser le statut à "non live" si l'opérateur
+n'a pas encore eu le temps d'ouvrir OBS et de cliquer "Démarrer la diffusion" — au-delà de ces
+45s sans connexion réelle détectée, le statut redescend automatiquement. Le panneau admin peut
+simplement re-poller la ressource (`GET /{préfixe}/{id}/`) ou se connecter au WebSocket du
+salon — le champ `status`/`is_live` de la ressource reste la source de vérité.
 
 **Modération du chat** (admin) : `DELETE /{préfixe}/{id}/chat/{message_id}/` fonctionne pour tout
 message, pas seulement les siens (permission `IsAdminUser` OU auteur).
@@ -350,20 +356,22 @@ déconnexion seront rejoués.
 | Chat POST au-delà de 20/min | `429 Too Many Requests` |
 | WebSocket avec un token JWT expiré/invalide | Connexion acceptée quand même, mais anonyme (pas d'erreur, pas de fermeture) |
 | `.../live/` ou `.../current/` sans direct en cours | `404 Not Found` avec un message lisible |
-| OBS déconnecté brutalement (crash, coupure réseau) | Le statut repasse automatiquement à "non live" via `runOnNotReady` — pas besoin d'appeler `end_live` manuellement, mais l'action admin reste disponible pour forcer l'arrêt à tout moment |
+| OBS déconnecté brutalement (crash, coupure réseau) | Le statut repasse automatiquement à "non live" au prochain sondage (≤ 15s, après le délai de grâce de 45s) — pas besoin d'appeler `end_live` manuellement, mais l'action admin reste disponible pour forcer l'arrêt à tout moment |
 
 ## Checklist de test de bout en bout
 
-1. `POST /{préfixe}/{id}/go_live/` (admin) → noter `rtmp_server_url` + `stream_key`.
-2. Configurer OBS (Personnalisé → Serveur + Clé de flux) et démarrer la diffusion.
-3. Vérifier que `GET /{préfixe}/{id}/` passe à `status="live"` / `is_live=true` dans les
-   quelques secondes suivant la connexion OBS (pas au moment du clic `go_live`).
+1. `POST /{préfixe}/{id}/go_live/` (admin) → noter `rtmp_server_url` + `stream_key` ; `status`/
+   `is_live` passe à "live" immédiatement dans la réponse.
+2. Configurer OBS (Personnalisé → Serveur + Clé de flux) et démarrer la diffusion **dans les 45s**
+   (délai de grâce — au-delà, sans connexion détectée, le statut redescend tout seul).
+3. Vérifier que `GET /{préfixe}/{id}/` reste à `status="live"` / `is_live=true` une fois OBS
+   effectivement connecté (le prochain sondage, ≤ 15s, le confirme).
 4. Vérifier que `playback_hls_url` charge dans un lecteur `hls.js`.
 5. Ouvrir `wss://<domaine>/ws/live/<room_type>/<room_id>/` (deux onglets/clients) et confirmer
    que `presence.count` s'incrémente/décrémente à la connexion/déconnexion.
 6. Poster un message via `POST .../chat/` et confirmer qu'il apparaît en temps réel dans les deux
    onglets via `chat.message`.
-7. Arrêter OBS (pas `end_live`) et confirmer que le statut repasse tout seul à "non live" en
-   quelques secondes (`runOnNotReady`).
+7. Arrêter OBS (pas `end_live`) et confirmer que le statut repasse tout seul à "non live" au
+   sondage suivant (≤ 15s, une fois le délai de grâce de 45s dépassé).
 8. Rappeler `go_live` et confirmer que `stream_key` est **identique** à la première fois
    (idempotence — OBS n'a pas besoin d'être reconfiguré).
