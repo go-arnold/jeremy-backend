@@ -58,9 +58,6 @@ cp .env.example .env   # si .env n'a pas déjà été transféré
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
 - `MEDIAMTX_RTMP_SERVER_URL=rtmp://art-du-kivu-api.kelor.tech:1935/live` et
   `MEDIAMTX_HLS_BASE_URL=https://art-du-kivu-api.kelor.tech/live-hls` (voir Phase 8).
-  `MEDIAMTX_WEBHOOK_SECRET` : choisis toi-même une valeur aléatoire (pas fournie par un tiers,
-  contrairement à l'ancien `CLOUDFLARE_WEBHOOK_SECRET`) — ex. `python3 -c "import secrets;
-  print(secrets.token_urlsafe(32))"` — et reporte cette même valeur dans `mediamtx.yml`.
 - `SECRET_KEY` — génère une valeur unique, par ex. :
   `python3 -c "import secrets; print(secrets.token_urlsafe(50))"`
 - `ALLOWED_HOSTS=art-du-kivu-api.kelor.tech` et `CORS_ALLOWED_ORIGINS=` (laisse vide ou mets un
@@ -150,15 +147,13 @@ curl -o /dev/null -s -w "%{http_code}\n" https://art-du-kivu-api.kelor.tech/api/
 
 ## Phase 8 — Live streaming (MediaMTX, auto-hébergé)
 
-Assure-toi d'abord que `.env` contient `MEDIAMTX_WEBHOOK_SECRET=<ta valeur>` (Phase 3), et que
-`docs/vps-deployment/mediamtx.yml` référence cette même variable (`$MEDIAMTX_WEBHOOK_SECRET`
-dans les hooks `runOnReady`/`runOnNotReady` — rien à éditer, elle est injectée automatiquement
-par `docker-compose.yaml`). Relance le stack pour que le nouveau service `mediamtx` démarre :
+Relance le stack pour que le nouveau service `mediamtx` démarre :
 
 ```bash
 cd /opt/art-du-kivu-backend/docs/vps-deployment
 docker compose up -d --build
-docker compose ps   # attends que "mediamtx" soit healthy
+docker compose ps   # "mediamtx" n'a pas de healthcheck (image FROM scratch, sans curl/wget) —
+                     # "Up" suffit, ne pas attendre un statut "healthy" qui ne viendra jamais.
 ```
 
 Ouvre le port RTMP dans le pare-feu si `ufw` est actif (sur ce VPS `ufw` est inactif, donc pas
@@ -169,6 +164,15 @@ Recharge le vhost nginx pour activer `/live-hls/` (voir Phase 6/7) :
 ```bash
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+**Le statut live n'est pas poussé par un webhook** — l'image officielle MediaMTX est `FROM
+scratch` (aucun shell, aucun `curl`/`wget` dedans), donc elle ne peut pas exécuter de hook
+`runOnReady`/`runOnNotReady`. À la place, une tâche Celery (`apps.streaming.tasks.
+sync_live_status`, toutes les 15s, voir `CELERY_BEAT_SCHEDULE`) interroge l'API MediaMTX
+(`GET /v3/paths/list`) et met à jour le statut de la ressource correspondante. `go_live` met le
+statut à "live" immédiatement ; un délai de grâce de 45s après `go_live` empêche la tâche de le
+repasser à "non live" tant que l'opérateur n'a pas eu le temps de démarrer OBS — passé ce délai
+sans connexion détectée, le statut redescend automatiquement.
 
 **Test de bout en bout avec `ffmpeg`** (remplace `<clé>` par n'importe quelle chaîne de test) :
 
@@ -181,12 +185,14 @@ Pendant que `ffmpeg` tourne :
 
 ```bash
 curl -I https://art-du-kivu-api.kelor.tech/live-hls/live/<clé>/index.m3u8   # doit répondre 200
-docker compose logs api --tail=20   # doit montrer le webhook mettre à jour un statut si <clé>
-                                     # correspond au stream_key d'un objet en base (voir go_live)
+docker compose logs worker --tail=20   # la tâche sync_live_status tourne dans "worker", pas "api"
 ```
 
-Arrête `ffmpeg` (Ctrl+C) et vérifie que le statut correspondant repasse à "ended"/"recorded" dans
-les logs — confirme que `runOnNotReady` fonctionne aussi.
+Vérifie directement en base/API que le statut de la ressource dont c'est le `stream_key` est
+bien passé à "live" (`GET` sur son endpoint). Arrête `ffmpeg` (Ctrl+C) et attends qu'au moins
+45s se soient écoulées depuis l'appel `go_live` (délai de grâce), puis jusqu'à 15s de plus pour
+le prochain sondage — revérifie que le statut redescend tout seul à "ended"/"recorded" (sans
+appeler `end_live` manuellement) — confirme que la déconnexion est bien détectée.
 
 ## Phase 9 — Ajuster `FRONTEND_URL` / `ALLOWED_HOSTS` / `CORS_ALLOWED_ORIGINS`
 

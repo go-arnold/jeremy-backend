@@ -65,8 +65,6 @@ services:
     restart: unless-stopped
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
-    environment:
-      MEDIAMTX_WEBHOOK_SECRET: ${MEDIAMTX_WEBHOOK_SECRET}
     ports:
       # RTMP ingest — the ONE deliberate exception to this stack's "loopback only" rule.
       # Broadcasters (OBS etc.) must reach this directly from the public internet; the secret
