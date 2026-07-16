@@ -24,7 +24,7 @@ diffusion en direct, engagement).
 15. [Sorties musicales (releases)](#sorties-musicales-releases)
 16. [Système d'engagement générique](#système-dengagement-générique)
 17. [Upload de médias (audio/vidéo/image)](#upload-de-médias-audiovidéoimage)
-18. [Diffusion en direct (Cloudflare Stream) côté frontend](#diffusion-en-direct-cloudflare-stream-côté-frontend)
+18. [Diffusion en direct (MediaMTX) côté frontend](#diffusion-en-direct-mediamtx-côté-frontend)
 19. [Temps réel : WebSocket (chat + présence)](#temps-réel--websocket-chat--présence)
 20. [Page d'accueil](#page-daccueil)
 21. [Recherche](#recherche)
@@ -325,8 +325,7 @@ transcription, facultatif — vide si non fournie par l'admin).
   "end_time": "14:00:00",
   "status": "live",
   "stream_url": "",
-  "cf_playback_hls_url": "https://customer-xxx.cloudflarestream.com/<uid>/manifest/video.m3u8",
-  "cf_playback_dash_url": "https://customer-xxx.cloudflarestream.com/<uid>/manifest/video.mpd",
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/live/<clé>/index.m3u8",
   "listener_count": 42
 }
 ```
@@ -393,7 +392,7 @@ grille de programmes + son propre chat.
   "status": "live",
   "cover_url": "https://res.cloudinary.com/.../cover.jpg",
   "scheduled_at": "2026-07-11T18:00:00Z",
-  "cf_playback_hls_url": "https://customer-xxx.cloudflarestream.com/<uid>/manifest/video.m3u8",
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/live/<clé>/index.m3u8",
   "online_followers": 128,
   "live_started_at": "2026-07-11T18:00:00Z"
 }
@@ -659,22 +658,44 @@ ou
 
 ---
 
-## Diffusion en direct (Cloudflare Stream) côté frontend
+## Diffusion en direct (MediaMTX) côté frontend
 
-Trois surfaces exposent des champs de lecture Cloudflare Stream une fois en direct :
-`RadioProgram`, `Emission`, `WebTVVideo`, `MusicLiveSession`, tous avec la même forme :
+> **Guide dédié** : `docs/LIVE_STREAMING.md` couvre en détail les 4 surfaces live (endpoints
+> complets, WebSocket présence/chat, engagement sur le contenu live) avec des guides
+> d'intégration séparés pour `frontend_admin` et `frontend_client`. Ce qui suit est un résumé.
+
+Le live est auto-hébergé via **MediaMTX** (remplace Cloudflare Stream). Quatre surfaces exposent
+un champ de lecture une fois en direct : `RadioProgram`, `Emission`, `WebTVVideo`,
+`MusicLiveSession`, tous avec la même forme :
 
 ```json
 {
-  "cf_playback_hls_url": "https://customer-<hash>.cloudflarestream.com/<uid>/manifest/video.m3u8",
-  "cf_playback_dash_url": "https://customer-<hash>.cloudflarestream.com/<uid>/manifest/video.mpd"
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/live/<clé>/index.m3u8"
 }
 ```
 
-Ces champs sont vides tant que la ressource n'est pas en direct. **Les champs `cf_rtmps_url` et
-`cf_rtmps_key` ne sont jamais renvoyés par les endpoints de lecture publics** — ils ne sont
+Ce champ est vide tant que la ressource n'est pas en direct. **Les champs `rtmp_server_url` et
+`stream_key` ne sont jamais renvoyés par les endpoints de lecture publics** — ils ne sont
 disponibles que dans la réponse de l'action admin `go_live` (à usage du logiciel de diffusion,
 type OBS Studio), jamais persistés côté client.
+
+### Configuration côté OBS (ou équivalent)
+
+`go_live` renvoie exactement les deux champs attendus par le mode "Custom..." d'OBS :
+
+```json
+{
+  "status": "live",
+  "rtmp_server_url": "rtmp://art-du-kivu-api.kelor.tech:1935/live",
+  "stream_key": "3f9a2b1c8e4d5f6a7b8c9d0e1f2a3b4c",
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/live/3f9a2b1c.../index.m3u8"
+}
+```
+
+Dans OBS : Paramètres → Flux → Service = *Personnalisé...* → **Serveur** = `rtmp_server_url`,
+**Clé de flux** = `stream_key`. Contrairement à l'ancienne intégration Cloudflare (RTMPS
+obligatoire, source probable des déconnexions répétées observées avec OBS), c'est du RTMP
+classique — le même protocole que Twitch/YouTube/Facebook utilisent par défaut.
 
 ### Lecture HLS avec `hls.js` (React)
 
@@ -713,7 +734,7 @@ compatible HLS (ou `hls.js` attaché à un élément `<audio>`) fonctionne de la
 ```ts
 async function goLive(resourcePath: string, id: string) {
   const res = await api.post(`/${resourcePath}/${id}/go_live/`);
-  // res.data.cf_rtmps_url / cf_rtmps_key : à afficher UNE FOIS à l'opérateur pour
+  // res.data.rtmp_server_url / stream_key : à afficher UNE FOIS à l'opérateur pour
   // configuration OBS — ne jamais les stocker ni les ré-afficher après coup.
   return res.data;
 }

@@ -1,6 +1,4 @@
-import hashlib
 import hmac
-import time
 
 from django.conf import settings
 from drf_spectacular.utils import extend_schema
@@ -8,46 +6,27 @@ from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-# How much clock skew / delivery delay to tolerate before treating a webhook as stale. A
-# validly-signed payload is otherwise valid forever, letting a captured request be replayed at
-# any point in the future to flip a resource's live status on demand.
-WEBHOOK_MAX_AGE_SECONDS = 300
-
-
-def _verify_signature(raw_body: bytes, header_value: str) -> bool:
-    if not settings.CLOUDFLARE_WEBHOOK_SECRET or not header_value:
-        return False
-    parts = dict(item.split("=", 1) for item in header_value.split(",") if "=" in item)
-    ts, sig = parts.get("time"), parts.get("sig1")
-    if not ts or not sig:
-        return False
-    try:
-        if abs(time.time() - int(ts)) > WEBHOOK_MAX_AGE_SECONDS:
-            return False
-    except ValueError:
-        return False
-    expected = hmac.new(
-        settings.CLOUDFLARE_WEBHOOK_SECRET.encode(), f"{ts}.".encode() + raw_body, hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(expected, sig)
-
 
 @extend_schema(tags=["Streaming"])
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
-def cloudflare_webhook(request):
-    """Receives Cloudflare Stream `live_input.connected`/`live_input.disconnected` events
-    and flips the matching Emission/RadioProgram/MusicLiveSession/WebTVVideo's live status."""
-    if not _verify_signature(request.body, request.headers.get("Webhook-Signature", "")):
-        return Response({"detail": "Signature invalide."}, status=status.HTTP_403_FORBIDDEN)
+def mediamtx_webhook(request):
+    """Receives MediaMTX's `runOnReady`/`runOnNotReady` hook calls and flips the matching
+    Emission/RadioProgram/MusicLiveSession/WebTVVideo's live status.
 
-    payload = request.data
-    uid = payload.get("uid") or payload.get("live_input_uid")
-    state = (payload.get("status") or {}).get("current", {}).get("state")
-    if not uid or not state:
+    Unlike the old Cloudflare webhook, this never touches the public internet — MediaMTX and
+    this API share a private Docker Compose network, so a shared secret is sufficient (no
+    HMAC/timestamp scheme needed, there's no third party's request to authenticate)."""
+    secret = settings.MEDIAMTX_WEBHOOK_SECRET
+    if not secret or not hmac.compare_digest(request.headers.get("X-Internal-Secret", ""), secret):
+        return Response({"detail": "Secret invalide."}, status=status.HTTP_403_FORBIDDEN)
+
+    stream_key = request.data.get("path", "")
+    event = request.data.get("event", "")
+    if not stream_key or event not in ("ready", "not_ready"):
         return Response({"detail": "ignoré — payload incomplet."})
 
-    is_connected = state == "connected"
+    is_live = event == "ready"
 
     from apps.emissions.models import Emission
     from apps.live_music.models import MusicLiveSession
@@ -60,15 +39,15 @@ def cloudflare_webhook(request):
         (MusicLiveSession, MusicLiveSession.STATUS_LIVE, MusicLiveSession.STATUS_ENDED),
     ]
     for model, live_value, ended_value in status_models:
-        obj = model.objects.filter(cf_live_input_uid=uid).first()
+        obj = model.objects.filter(stream_key=stream_key).first()
         if obj:
-            obj.status = live_value if is_connected else ended_value
+            obj.status = live_value if is_live else ended_value
             obj.save(update_fields=["status"])
             return Response({"detail": "mis à jour"})
 
-    video = WebTVVideo.objects.filter(cf_live_input_uid=uid).first()
+    video = WebTVVideo.objects.filter(stream_key=stream_key).first()
     if video:
-        video.is_live = is_connected
+        video.is_live = is_live
         video.save(update_fields=["is_live"])
         return Response({"detail": "mis à jour"})
 

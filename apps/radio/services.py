@@ -10,7 +10,7 @@ CURRENT_KEY = "radio:current"
 
 @transaction.atomic
 def start_live(program: RadioProgram) -> RadioProgram:
-    fields = streaming_services.start_live_input(program.title, existing_uid=program.cf_live_input_uid)
+    fields = streaming_services.start_live_input(program.title, existing_key=program.stream_key)
     for attr, value in fields.items():
         setattr(program, attr, value)
     program.status = RadioProgram.STATUS_LIVE
@@ -21,9 +21,9 @@ def start_live(program: RadioProgram) -> RadioProgram:
 
 @transaction.atomic
 def end_live(program: RadioProgram) -> RadioProgram:
-    streaming_services.stop_live_input(program.cf_live_input_uid)
+    streaming_services.stop_live_input(program.stream_key)
     program.status = RadioProgram.STATUS_ENDED
-    program.cf_live_input_uid = ""
+    program.stream_key = ""
     program.save()
     cache.delete(CURRENT_KEY)
     return program

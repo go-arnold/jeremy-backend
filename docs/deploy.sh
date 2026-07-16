@@ -35,7 +35,7 @@ require_env_file() {
         DB_NAME DB_USER DB_PASSWORD DB_HOST DB_PORT
         CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET
         REDIS_URL SECRET_KEY ALLOWED_HOSTS
-        CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN CLOUDFLARE_CUSTOMER_HOSTNAME CLOUDFLARE_WEBHOOK_SECRET
+        MEDIAMTX_RTMP_SERVER_URL MEDIAMTX_HLS_BASE_URL MEDIAMTX_WEBHOOK_SECRET
     )
     local missing=()
     for var in "${required_vars[@]}"; do
@@ -63,7 +63,7 @@ cmd_up() {
             log "API en ligne (${HEALTH_URL})."
             log "vérifications manuelles restantes : voir docs/DEPLOY.md section 'Vérification post-déploiement'"
             log "  - ws://<domaine>/ws/live/radio/live/ (chat + présence)"
-            log "  - POST /api/v1/streaming/webhook/ (accessible publiquement pour Cloudflare)"
+            log "  - rtmp://<domaine>:1935/live/<clé> (ingestion MediaMTX, self-hosted)"
             compose ps
             return 0
         fi

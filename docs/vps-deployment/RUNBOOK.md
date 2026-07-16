@@ -56,8 +56,11 @@ cp .env.example .env   # si .env n'a pas déjà été transféré
   Postgres auto-hébergé (ne réutilise pas un mot de passe existant). `DB_HOST`/`DB_PORT` sont
   déjà forcés à `db`/`5432` par `docker-compose.yaml` — inutile de les régler ici.
 - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
-- `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_CUSTOMER_HOSTNAME` — laisse
-  `CLOUDFLARE_WEBHOOK_SECRET` vide pour l'instant (voir Phase 8).
+- `MEDIAMTX_RTMP_SERVER_URL=rtmp://art-du-kivu-api.kelor.tech:1935/live` et
+  `MEDIAMTX_HLS_BASE_URL=https://art-du-kivu-api.kelor.tech/live-hls` (voir Phase 8).
+  `MEDIAMTX_WEBHOOK_SECRET` : choisis toi-même une valeur aléatoire (pas fournie par un tiers,
+  contrairement à l'ancien `CLOUDFLARE_WEBHOOK_SECRET`) — ex. `python3 -c "import secrets;
+  print(secrets.token_urlsafe(32))"` — et reporte cette même valeur dans `mediamtx.yml`.
 - `SECRET_KEY` — génère une valeur unique, par ex. :
   `python3 -c "import secrets; print(secrets.token_urlsafe(50))"`
 - `ALLOWED_HOSTS=art-du-kivu-api.kelor.tech` et `CORS_ALLOWED_ORIGINS=` (laisse vide ou mets un
@@ -145,29 +148,45 @@ curl -s https://art-du-kivu-api.kelor.tech/api/v1/health/
 curl -o /dev/null -s -w "%{http_code}\n" https://art-du-kivu-api.kelor.tech/api/docs/
 ```
 
-## Phase 8 — Webhook Cloudflare Stream (maintenant que le domaine est joignable)
+## Phase 8 — Live streaming (MediaMTX, auto-hébergé)
 
-```bash
-curl -X PUT \
-  "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/stream/webhook" \
-  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-  -H "Content-Type: application/json" \
-  --data '{"notificationUrl": "https://art-du-kivu-api.kelor.tech/api/v1/streaming/webhook/"}'
-```
-
-Copie le secret renvoyé dans `.env` (`CLOUDFLARE_WEBHOOK_SECRET=...`), puis :
+Assure-toi d'abord que `.env` contient `MEDIAMTX_WEBHOOK_SECRET=<ta valeur>` (Phase 3), et que
+`docs/vps-deployment/mediamtx.yml` référence cette même variable (`$MEDIAMTX_WEBHOOK_SECRET`
+dans les hooks `runOnReady`/`runOnNotReady` — rien à éditer, elle est injectée automatiquement
+par `docker-compose.yaml`). Relance le stack pour que le nouveau service `mediamtx` démarre :
 
 ```bash
 cd /opt/art-du-kivu-backend/docs/vps-deployment
-./reload-env.sh
+docker compose up -d --build
+docker compose ps   # attends que "mediamtx" soit healthy
 ```
 
-Vérifie que le webhook répond correctement (403 attendu sans signature valide — c'est le
-comportement normal, pas une erreur) :
+Ouvre le port RTMP dans le pare-feu si `ufw` est actif (sur ce VPS `ufw` est inactif, donc pas
+nécessaire ici — sinon : `sudo ufw allow 1935/tcp`).
+
+Recharge le vhost nginx pour activer `/live-hls/` (voir Phase 6/7) :
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" -X POST https://art-du-kivu-api.kelor.tech/api/v1/streaming/webhook/
+sudo nginx -t && sudo systemctl reload nginx
 ```
+
+**Test de bout en bout avec `ffmpeg`** (remplace `<clé>` par n'importe quelle chaîne de test) :
+
+```bash
+ffmpeg -re -f lavfi -i testsrc -f lavfi -i sine -c:v libx264 -c:a aac -f flv \
+  rtmp://art-du-kivu-api.kelor.tech:1935/live/<clé>
+```
+
+Pendant que `ffmpeg` tourne :
+
+```bash
+curl -I https://art-du-kivu-api.kelor.tech/live-hls/live/<clé>/index.m3u8   # doit répondre 200
+docker compose logs api --tail=20   # doit montrer le webhook mettre à jour un statut si <clé>
+                                     # correspond au stream_key d'un objet en base (voir go_live)
+```
+
+Arrête `ffmpeg` (Ctrl+C) et vérifie que le statut correspondant repasse à "ended"/"recorded" dans
+les logs — confirme que `runOnNotReady` fonctionne aussi.
 
 ## Phase 9 — Ajuster `FRONTEND_URL` / `ALLOWED_HOSTS` / `CORS_ALLOWED_ORIGINS`
 

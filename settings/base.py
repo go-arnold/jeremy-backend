@@ -202,11 +202,15 @@ CHANNEL_LAYERS = {
     }
 }
 
-# ── Cloudflare Stream (live ingest/playback) ─────────────────────────────────
-CLOUDFLARE_ACCOUNT_ID = config("CLOUDFLARE_ACCOUNT_ID", default="")
-CLOUDFLARE_API_TOKEN = config("CLOUDFLARE_API_TOKEN", default="")
-CLOUDFLARE_CUSTOMER_HOSTNAME = config("CLOUDFLARE_CUSTOMER_HOSTNAME", default="")
-CLOUDFLARE_WEBHOOK_SECRET = config("CLOUDFLARE_WEBHOOK_SECRET", default="")
+# ── MediaMTX (self-hosted live ingest/playback) ──────────────────────────────
+MEDIAMTX_RTMP_SERVER_URL = config(
+    "MEDIAMTX_RTMP_SERVER_URL", default=""
+)  # public, e.g. rtmp://art-du-kivu-api.kelor.tech:1935/live
+MEDIAMTX_HLS_BASE_URL = config(
+    "MEDIAMTX_HLS_BASE_URL", default=""
+)  # public, e.g. https://art-du-kivu-api.kelor.tech/live-hls
+MEDIAMTX_API_URL = config("MEDIAMTX_API_URL", default="http://mediamtx:9997")  # internal Docker DNS only
+MEDIAMTX_WEBHOOK_SECRET = config("MEDIAMTX_WEBHOOK_SECRET", default="")
 
 # ── Elasticsearch ─────────────────────────────────────────────────────────────
 # Point at a managed cluster (Elastic Cloud, AWS OpenSearch, ...) in production
@@ -392,7 +396,7 @@ SPECTACULAR_SETTINGS = {
         {"name": "Newsletter", "description": "Subscribe/unsubscribe and admin campaign sending"},
         {"name": "Search", "description": "Unified full-text search across all content types"},
         {"name": "Home", "description": "Aggregated homepage payload"},
-        {"name": "Streaming", "description": "Cloudflare Stream live ingest control and webhooks"},
+        {"name": "Streaming", "description": "MediaMTX (self-hosted) live ingest control and webhooks"},
         {"name": "Live Music", "description": "Live music session, schedule grid and live chat"},
         {"name": "Media", "description": "Signed direct-to-Cloudinary upload for audio/video/image"},
         {"name": "Gamification", "description": "Badges, consumption tracking, media ranking"},

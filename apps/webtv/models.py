@@ -2,10 +2,10 @@ from cloudinary.models import CloudinaryField
 from django.db import models
 
 from apps.engagement.models import Engageable
-from apps.streaming.fields import CloudflareLiveFields
+from apps.streaming.fields import LiveStreamFields
 
 
-class WebTVVideo(CloudflareLiveFields, Engageable):
+class WebTVVideo(LiveStreamFields, Engageable):
     CATEGORY_FREESTYLES = "freestyles"
     CATEGORY_STUDIO = "studio_sessions"
     CATEGORY_DOCS = "docs"

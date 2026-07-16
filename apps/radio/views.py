@@ -1,5 +1,6 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.conf import settings
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
@@ -61,9 +62,9 @@ class RadioProgramViewSet(UploadThrottleMixin, ModelViewSet):
         return Response(
             {
                 "status": program.status,
-                "cf_rtmps_url": program.cf_rtmps_url,
-                "cf_rtmps_key": program.cf_rtmps_key,
-                "cf_playback_hls_url": program.cf_playback_hls_url,
+                "rtmp_server_url": settings.MEDIAMTX_RTMP_SERVER_URL,
+                "stream_key": program.stream_key,
+                "playback_hls_url": program.playback_hls_url,
             }
         )
 

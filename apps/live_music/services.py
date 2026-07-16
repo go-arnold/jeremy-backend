@@ -40,7 +40,7 @@ def delete_session(session: MusicLiveSession) -> None:
 
 @transaction.atomic
 def start_live(session: MusicLiveSession) -> MusicLiveSession:
-    fields = streaming_services.start_live_input(session.title, existing_uid=session.cf_live_input_uid)
+    fields = streaming_services.start_live_input(session.title, existing_key=session.stream_key)
     for attr, value in fields.items():
         setattr(session, attr, value)
     session.status = MusicLiveSession.STATUS_LIVE
@@ -51,9 +51,9 @@ def start_live(session: MusicLiveSession) -> MusicLiveSession:
 
 @transaction.atomic
 def end_live(session: MusicLiveSession) -> MusicLiveSession:
-    streaming_services.stop_live_input(session.cf_live_input_uid)
+    streaming_services.stop_live_input(session.stream_key)
     session.status = MusicLiveSession.STATUS_ENDED
-    session.cf_live_input_uid = ""
+    session.stream_key = ""
     session.save()
     cache.delete(CURRENT_KEY)
     return session

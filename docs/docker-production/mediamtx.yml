@@ -1,0 +1,32 @@
+# MediaMTX config — self-hosted replacement for Cloudflare Stream Live.
+# Mounted read-only into the `mediamtx` service (see docker-compose.yaml).
+
+rtmp: yes
+rtmpAddress: :1935
+
+hls: yes
+hlsAddress: :8888
+
+# Internal-only (never published to the host) — used by apps/streaming/client.py's
+# kick_publisher() to force-disconnect an active broadcaster on end_live.
+api: yes
+apiAddress: :9997
+
+# Applies to every path (including the one defined below) unless overridden per-path.
+# $G1 is the first regex capture group from the path pattern below — our bare stream_key,
+# without the "live/" prefix. Both hooks POST to the Django API over the private Docker
+# Compose network (never the public internet), authenticated with a shared secret rather
+# than Cloudflare's HMAC+timestamp scheme (there's no third-party request to defend against
+# here — see apps/streaming/views.py::mediamtx_webhook).
+pathDefaults:
+  runOnReady: >
+    curl -s -X POST http://api:8000/api/v1/streaming/mediamtx-webhook/
+    -H "X-Internal-Secret: $MEDIAMTX_WEBHOOK_SECRET" -d "path=$G1" -d "event=ready"
+  runOnNotReady: >
+    curl -s -X POST http://api:8000/api/v1/streaming/mediamtx-webhook/
+    -H "X-Internal-Secret: $MEDIAMTX_WEBHOOK_SECRET" -d "path=$G1" -d "event=not_ready"
+
+# Only "live/<stream_key>" paths are accepted — anything else is rejected by MediaMTX before
+# it ever reaches our webhook.
+paths:
+  "~^live/(.+)$":

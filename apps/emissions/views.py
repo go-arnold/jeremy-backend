@@ -1,3 +1,4 @@
+from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status
 from rest_framework.decorators import action
@@ -69,9 +70,9 @@ class EmissionViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet)
         return Response(
             {
                 "status": emission.status,
-                "cf_rtmps_url": emission.cf_rtmps_url,
-                "cf_rtmps_key": emission.cf_rtmps_key,
-                "cf_playback_hls_url": emission.cf_playback_hls_url,
+                "rtmp_server_url": settings.MEDIAMTX_RTMP_SERVER_URL,
+                "stream_key": emission.stream_key,
+                "playback_hls_url": emission.playback_hls_url,
             }
         )
 

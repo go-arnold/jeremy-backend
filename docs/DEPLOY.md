@@ -17,27 +17,18 @@ plateforme managée (PaaS).
       `docs/docker-production/docker-compose.yaml`).
 - [ ] Compte Cloudinary configuré (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`,
       `CLOUDINARY_API_SECRET`).
-- [ ] Compte Cloudflare Stream configuré (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
-      `CLOUDFLARE_CUSTOMER_HOSTNAME`).
+- [ ] MediaMTX déployé (auto-hébergé, `docs/docker-production/mediamtx.yml`) avec
+      `MEDIAMTX_RTMP_SERVER_URL`, `MEDIAMTX_HLS_BASE_URL`, `MEDIAMTX_WEBHOOK_SECRET` renseignés,
+      et le port RTMP (1935) ouvert publiquement.
 - [ ] Nom de domaine et certificat TLS prêts (ou plateforme gérant le TLS automatiquement).
 - [ ] `ALLOWED_HOSTS` et `CORS_ALLOWED_ORIGINS` renseignés avec les domaines réels (frontend admin
       et frontend client).
 - [ ] `.env` complet et copié à l'emplacement attendu (racine de `backend/` — voir `.env.example`).
 
-**Important** : `CLOUDFLARE_WEBHOOK_SECRET` ne peut être obtenu qu'**après** que le domaine de
-production soit joignable publiquement (Cloudflare doit pouvoir atteindre
-`https://<domaine>/api/v1/streaming/webhook/` pour valider l'enregistrement du webhook). L'ordre
-recommandé est donc : déployer une première fois sans les événements de webhook fonctionnels →
-enregistrer le webhook (commande ci-dessous) → renseigner `CLOUDFLARE_WEBHOOK_SECRET` → redéployer
-ou redémarrer le service `api`.
-
-```bash
-curl -X PUT \
-  "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/stream/webhook" \
-  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-  -H "Content-Type: application/json" \
-  --data '{"notificationUrl": "https://<domaine-backend>/api/v1/streaming/webhook/"}'
-```
+**Note** : contrairement à l'ancienne intégration Cloudflare Stream, `MEDIAMTX_WEBHOOK_SECRET`
+n'est pas fourni par un tiers — c'est une valeur que tu choisis toi-même (ex. `python3 -c
+"import secrets; print(secrets.token_urlsafe(32))"`), reportée à l'identique dans `mediamtx.yml`.
+Elle peut donc être définie dès le premier déploiement, sans dépendre du domaine déjà joignable.
 
 ## 2. Option Docker (auto-hébergé)
 
@@ -58,10 +49,10 @@ Le script (`docs/deploy.sh`) :
 
 1. Vérifie que `.env` existe et que les variables critiques ne sont pas vides.
 2. Construit les images (`Dockerfile` en deux étapes — voir `docs/docker-production/Dockerfile`)
-   et démarre `elasticsearch`, `api`, `worker`, `beat`, `nginx`.
+   et démarre `elasticsearch`, `mediamtx`, `api`, `worker`, `beat`, `nginx`.
 3. Attend que `GET /api/v1/health/` réponde (jusqu'à ~100 secondes), avec un message d'erreur
    explicite en cas d'échec.
-4. Rappelle les vérifications manuelles restantes (WebSocket, webhook Cloudflare).
+4. Rappelle les vérifications manuelles restantes (WebSocket, ingestion MediaMTX).
 
 Autres commandes disponibles :
 
@@ -99,8 +90,10 @@ démarrage du service `api` (voir la commande définie dans
 4. Vérifier explicitement dans la documentation de la plateforme que le plan choisi pour le
    service **Web** supporte les connexions WebSocket de longue durée (certains plans "starter"
    imposent un timeout de requête incompatible avec un chat en direct).
-5. Une fois le domaine attribué et joignable, enregistrer le webhook Cloudflare (section 1) et
-   renseigner `CLOUDFLARE_WEBHOOK_SECRET`, puis redéployer.
+5. **Limite à connaître** : le live streaming (MediaMTX) a besoin d'exposer un port RTMP brut
+   (1935/TCP) — la plupart des plans "web" PaaS ne routent que du HTTP(S) et ne conviennent pas
+   pour ça. Si tu choisis cette option, prévois un service séparé (VPS/VM classique) juste pour
+   `mediamtx`, ou accepte que le live streaming reste indisponible sur ce déploiement.
 
 ## 4. Vérification post-déploiement
 
@@ -120,8 +113,9 @@ curl -o /dev/null -s -w "%{http_code}\n" https://<domaine>/api/docs/
 websocat "wss://<domaine>/ws/live/radio/live/"
 # Une connexion réussie renvoie immédiatement : {"event": "presence.count", "count": 1}
 
-# 5. Webhook Cloudflare — doit renvoyer 403 (signature absente), PAS 404
-curl -s -o /dev/null -w "%{http_code}\n" -X POST https://<domaine>/api/v1/streaming/webhook/
+# 5. Live streaming (MediaMTX) — test RTMP + HLS de bout en bout, voir
+#    docs/vps-deployment/RUNBOOK.md Phase 8 pour la commande ffmpeg complète.
+curl -I https://<domaine>/live-hls/live/<clé-de-test>/index.m3u8
 ```
 
 Si l'étape 4 échoue avec un code HTTP 404 ou 426 au lieu d'un upgrade WebSocket, le service sert

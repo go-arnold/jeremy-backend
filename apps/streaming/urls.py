@@ -1,7 +1,7 @@
 from django.urls import path
 
-from .views import cloudflare_webhook
+from .views import mediamtx_webhook
 
 urlpatterns = [
-    path("webhook/", cloudflare_webhook, name="cloudflare-webhook"),
+    path("mediamtx-webhook/", mediamtx_webhook, name="mediamtx-webhook"),
 ]
