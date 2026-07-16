@@ -52,3 +52,16 @@ def count(room_type: str, room_id: str) -> int:
     cutoff = time.time() - PRESENCE_TTL_SECONDS
     conn.zremrangebyscore(key, "-inf", cutoff)
     return conn.zcard(key)
+
+
+# Reserved room_type used purely as a Redis key namespace (never a real WebSocket room, so it
+# never appears in routing.py's whitelist) — tracks "is this user connected to ANY live room
+# right now", independent of which room(s). Keyed by user id with each connection's
+# channel_name as the member, so several simultaneous tabs/rooms for the same user collapse
+# into one membership instead of prematurely flipping the user offline when just one of them
+# disconnects. Backs User.is_online (computed in apps.accounts.serializers).
+GLOBAL_PRESENCE_ROOM_TYPE = "_user"
+
+
+def is_user_online(user_id) -> bool:
+    return count(GLOBAL_PRESENCE_ROOM_TYPE, str(user_id)) > 0

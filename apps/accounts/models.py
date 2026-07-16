@@ -23,7 +23,6 @@ class User(AbstractUser):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ROLE_VIEWER)
     google_id = models.CharField(max_length=128, blank=True, db_index=True)
     is_verified = models.BooleanField(default=False)
-    is_online = models.BooleanField(default=False)
     listen_count = models.PositiveIntegerField(default=0)
     favorite_artists = models.ManyToManyField("artists.Artist", blank=True, related_name="favorited_by")
     created_at = models.DateTimeField(auto_now_add=True)

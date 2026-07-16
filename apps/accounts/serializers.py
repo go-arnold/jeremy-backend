@@ -2,6 +2,8 @@ from dj_rest_auth.registration.serializers import RegisterSerializer as BaseRegi
 from dj_rest_auth.serializers import UserDetailsSerializer
 from rest_framework import serializers
 
+from apps.realtime.presence import is_user_online
+
 from .models import ListenHistory, User
 
 
@@ -22,6 +24,7 @@ class RegisterSerializer(BaseRegisterSerializer):
 
 class UserSerializer(UserDetailsSerializer):
     avatar_url = serializers.SerializerMethodField()
+    is_online = serializers.SerializerMethodField()
 
     class Meta(UserDetailsSerializer.Meta):
         model = User
@@ -45,19 +48,16 @@ class UserSerializer(UserDetailsSerializer):
             return obj.avatar.url
         return None
 
-
-class UserPublicSerializer(serializers.ModelSerializer):
-    avatar_url = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-        fields = ["id", "username", "handle", "bio", "is_online", "avatar_url"]
-
-    def get_avatar_url(self, obj):
-        return obj.avatar.url if obj.avatar else None
+    def get_is_online(self, obj):
+        """Computed live from WebSocket presence (apps.realtime.presence), not stored — true as
+        long as the user has at least one active connection to any live room (chat/direct)."""
+        return is_user_online(obj.id)
 
 
 class UserAdminSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+    is_online = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
@@ -69,10 +69,18 @@ class UserAdminSerializer(serializers.ModelSerializer):
             "role",
             "is_active",
             "is_verified",
+            "is_online",
             "listen_count",
+            "avatar_url",
             "created_at",
         ]
         read_only_fields = ["id", "listen_count", "created_at"]
+
+    def get_avatar_url(self, obj):
+        return obj.avatar.url if obj.avatar else None
+
+    def get_is_online(self, obj):
+        return is_user_online(obj.id)
 
 
 class ListenHistorySerializer(serializers.ModelSerializer):
@@ -120,3 +128,20 @@ class UserBulkUpdateItemSerializer(serializers.Serializer):
 
 class UserBulkUpdateSerializer(serializers.Serializer):
     items = UserBulkUpdateItemSerializer(many=True, min_length=1, max_length=100)
+
+
+class BulkUpdateResultSerializer(serializers.Serializer):
+    updated = serializers.IntegerField()
+
+
+class BulkDeleteResultSerializer(serializers.Serializer):
+    deleted = serializers.IntegerField()
+
+
+class FavoriteToggleSerializer(serializers.Serializer):
+    artist_id = serializers.IntegerField(min_value=1)
+
+
+class FavoriteActionResponseSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["added", "removed"])
+    artist_id = serializers.IntegerField()
