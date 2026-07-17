@@ -24,7 +24,14 @@ class RegisterSerializer(BaseRegisterSerializer):
 
 class UserSerializer(UserDetailsSerializer):
     avatar_url = serializers.SerializerMethodField()
+    cover_image_url = serializers.SerializerMethodField()
     is_online = serializers.SerializerMethodField()
+    # Write-only counterparts: the frontend uploads the file to Cloudinary directly (via the
+    # signed upload-signature flow, same as community media) and PATCHes the resulting
+    # `secure_url` here — CloudinaryField accepts a plain URL string assignment directly and
+    # derives its own delivery URL from it, no server-side file upload involved.
+    avatar = serializers.URLField(write_only=True, required=False, allow_blank=True)
+    cover_image = serializers.URLField(write_only=True, required=False, allow_blank=True)
 
     class Meta(UserDetailsSerializer.Meta):
         model = User
@@ -39,14 +46,28 @@ class UserSerializer(UserDetailsSerializer):
             "is_online",
             "listen_count",
             "avatar_url",
+            "cover_image_url",
+            "avatar",
+            "cover_image",
             "created_at",
         ]
         read_only_fields = ["id", "email", "role", "is_verified", "listen_count", "created_at"]
 
+    # Right after this serializer's own `update()` writes a plain URL string into `avatar`/
+    # `cover_image`, the in-memory instance still holds that raw string (CloudinaryField only
+    # normalizes it into a `CloudinaryResource` — with a `.url` property — once reloaded from
+    # the DB), so `to_representation` immediately after a PATCH sees a plain `str` here, not a
+    # `CloudinaryResource`. Handled defensively rather than forcing a `refresh_from_db()` on
+    # every read.
+    def get_cover_image_url(self, obj):
+        if not obj.cover_image:
+            return None
+        return obj.cover_image.url if hasattr(obj.cover_image, "url") else str(obj.cover_image)
+
     def get_avatar_url(self, obj):
-        if obj.avatar:
-            return obj.avatar.url
-        return None
+        if not obj.avatar:
+            return None
+        return obj.avatar.url if hasattr(obj.avatar, "url") else str(obj.avatar)
 
     def get_is_online(self, obj):
         """Computed live from WebSocket presence (apps.realtime.presence), not stored — true as

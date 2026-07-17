@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.engagement.services import engagement_counts
+
 from .models import Emission
 
 
@@ -27,6 +29,8 @@ class EmissionListSerializer(serializers.ModelSerializer):
 class EmissionDetailSerializer(serializers.ModelSerializer):
     cover_url = serializers.SerializerMethodField()
     host_names = serializers.SerializerMethodField()
+    like_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Emission
@@ -44,6 +48,8 @@ class EmissionDetailSerializer(serializers.ModelSerializer):
             "viewer_count",
             "total_views",
             "host_names",
+            "like_count",
+            "comment_count",
             "created_at",
         ]
 
@@ -52,6 +58,14 @@ class EmissionDetailSerializer(serializers.ModelSerializer):
 
     def get_host_names(self, obj):
         return [h.name for h in obj.hosts.all()]
+
+    # Single-object endpoint (retrieve/live only) — safe here, unlike EmissionListSerializer
+    # where this would be an N+1 across every item on the page.
+    def get_like_count(self, obj):
+        return engagement_counts(obj)["like_count"]
+
+    def get_comment_count(self, obj):
+        return engagement_counts(obj)["comment_count"]
 
 
 class EmissionWriteSerializer(serializers.ModelSerializer):
