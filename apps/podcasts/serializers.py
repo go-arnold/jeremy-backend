@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.engagement.services import engagement_counts
 from apps.media_uploads.validation import verify_cloudinary_asset
 
 from .models import PodcastEpisode, PodcastSeries
@@ -56,6 +57,8 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
     cover_url = serializers.SerializerMethodField()
     audio_url = serializers.SerializerMethodField()
     series = PodcastSeriesListSerializer(read_only=True)
+    like_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = PodcastEpisode
@@ -75,10 +78,26 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "is_featured",
             "published_at",
             "series",
+            "like_count",
+            "comment_count",
         ]
 
     def get_cover_url(self, obj):
         return obj.cover.url if obj.cover else None
+
+    # Single-object endpoint (retrieve only) — see WebTV's VideoDetailSerializer for the same
+    # pattern/rationale (cached per-request so both fields share one engagement_counts() call).
+    def _counts(self, obj):
+        cache = self.context.setdefault("_engagement_counts_cache", {})
+        if obj.pk not in cache:
+            cache[obj.pk] = engagement_counts(obj)
+        return cache[obj.pk]
+
+    def get_like_count(self, obj):
+        return self._counts(obj)["like_count"]
+
+    def get_comment_count(self, obj):
+        return self._counts(obj)["comment_count"]
 
     def get_audio_url(self, obj):
         if obj.audio_file:

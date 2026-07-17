@@ -24,6 +24,7 @@ UPLOAD_CONTEXTS = {
     "community_video": {"resource_type": "video", "folder": "community/posts", "staff_only": False},
     "community_song": {"resource_type": "video", "folder": "community/posts", "staff_only": False},
     "user_avatar": {"resource_type": "image", "folder": "users/avatars", "staff_only": False},
+    "user_cover": {"resource_type": "image", "folder": "users/covers", "staff_only": False},
 }
 
 # Cloudinary treats anything with a time dimension (audio included) as "video" — using this

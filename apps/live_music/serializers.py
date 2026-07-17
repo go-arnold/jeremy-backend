@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.engagement.services import engagement_counts
 from apps.realtime import presence
 
 from .models import MusicLiveSession, MusicLiveSlot
@@ -9,6 +10,8 @@ class MusicLiveSessionSerializer(serializers.ModelSerializer):
     artist_names = serializers.SerializerMethodField()
     online_followers = serializers.SerializerMethodField()
     cover_url = serializers.SerializerMethodField()
+    like_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = MusicLiveSession
@@ -23,6 +26,8 @@ class MusicLiveSessionSerializer(serializers.ModelSerializer):
             "playback_hls_url",
             "online_followers",
             "live_started_at",
+            "like_count",
+            "comment_count",
             "created_at",
         ]
 
@@ -34,6 +39,15 @@ class MusicLiveSessionSerializer(serializers.ModelSerializer):
 
     def get_cover_url(self, obj):
         return obj.cover.url if obj.cover else None
+
+    # There is no separate list/detail split for this serializer, and current real usage
+    # (`/live_music/sessions/current/`) only ever fetches a single object — safe to compute
+    # directly here, same reasoning as WebTV/Releases/Emissions' single-object serializers.
+    def get_like_count(self, obj):
+        return engagement_counts(obj)["like_count"]
+
+    def get_comment_count(self, obj):
+        return engagement_counts(obj)["comment_count"]
 
 
 class MusicLiveSessionWriteSerializer(serializers.ModelSerializer):

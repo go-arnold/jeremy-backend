@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.engagement.services import engagement_counts
 from apps.media_uploads.validation import verify_cloudinary_asset
 
 from .models import MusicRelease
@@ -32,6 +33,8 @@ class ReleaseListSerializer(serializers.ModelSerializer):
 class ReleaseDetailSerializer(serializers.ModelSerializer):
     cover_url = serializers.SerializerMethodField()
     artist_name = serializers.CharField(source="artist.name", read_only=True)
+    like_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = MusicRelease
@@ -48,10 +51,20 @@ class ReleaseDetailSerializer(serializers.ModelSerializer):
             "description",
             "preview_url",
             "artist_name",
+            "like_count",
+            "comment_count",
         ]
 
     def get_cover_url(self, obj):
         return obj.cover.url if obj.cover else None
+
+    # Single-object endpoint (retrieve/featured only) — safe to compute directly here, unlike
+    # ReleaseListSerializer where this would be an N+1 across every item on the page.
+    def get_like_count(self, obj):
+        return engagement_counts(obj)["like_count"]
+
+    def get_comment_count(self, obj):
+        return engagement_counts(obj)["comment_count"]
 
 
 class ReleaseWriteSerializer(serializers.ModelSerializer):
