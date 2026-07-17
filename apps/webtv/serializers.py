@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.engagement.services import engagement_counts
 from apps.media_uploads.validation import verify_cloudinary_asset
 
 from .models import WebTVVideo
@@ -35,6 +36,8 @@ class VideoListSerializer(serializers.ModelSerializer):
 
 class VideoDetailSerializer(serializers.ModelSerializer):
     thumbnail_url = serializers.SerializerMethodField()
+    like_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = WebTVVideo
@@ -52,11 +55,29 @@ class VideoDetailSerializer(serializers.ModelSerializer):
             "is_live",
             "location",
             "view_count",
+            "like_count",
+            "comment_count",
             "published_at",
         ]
 
     def get_thumbnail_url(self, obj):
         return obj.thumbnail.url if obj.thumbnail else None
+
+    # Single-object endpoint (retrieve only) — safe to compute directly here, unlike a list
+    # serializer where this would be an N+1 (see CommunityPostSerializer.get_comment_count for
+    # the annotated pattern used there instead). Cached on `context` so the two fields share one
+    # `engagement_counts()` call instead of running its 4 COUNT queries twice.
+    def _counts(self, obj):
+        cache = self.context.setdefault("_engagement_counts_cache", {})
+        if obj.pk not in cache:
+            cache[obj.pk] = engagement_counts(obj)
+        return cache[obj.pk]
+
+    def get_like_count(self, obj):
+        return self._counts(obj)["like_count"]
+
+    def get_comment_count(self, obj):
+        return self._counts(obj)["comment_count"]
 
 
 class VideoWriteSerializer(serializers.ModelSerializer):
