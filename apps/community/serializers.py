@@ -57,7 +57,10 @@ class CommunityPostWriteSerializer(serializers.ModelSerializer):
 
 class TalentSubmissionSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=200)
-    media = serializers.ListField(child=serializers.JSONField(), min_length=1, max_length=10)
+    content = serializers.CharField(max_length=2000)
+    # One talent submission = one piece of media (audio, video, or photo) — the frontend only
+    # ever lets the user pick a single file, so this mirrors that instead of allowing a batch.
+    media = serializers.ListField(child=serializers.JSONField(), min_length=1, max_length=1)
 
     def validate_media(self, value):
         allowed = {"song", "video", "image"}

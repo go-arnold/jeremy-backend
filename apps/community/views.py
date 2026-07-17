@@ -79,7 +79,7 @@ class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
             {
                 "title": ser.validated_data["title"],
                 "media": ser.validated_data["media"],
-                "content": ser.validated_data["title"],
+                "content": ser.validated_data["content"],
                 "post_type": CommunityPost.TYPE_TALENT,
             },
             request.user,
