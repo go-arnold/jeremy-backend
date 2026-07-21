@@ -33,7 +33,10 @@ services:
       start_period: 30s
 
   mediamtx:
-    image: bluenviron/mediamtx:1.19.2
+    # -ffmpeg variant required for mediamtx.yml's runOnReady transcode hooks (the plain image is
+    # `FROM scratch`, no shell/ffmpeg inside it at all). Confirm this exact tag still exists on
+    # Docker Hub at deploy time — not verifiable from this environment (no internet access).
+    image: bluenviron/mediamtx:1.19.2-ffmpeg
     restart: unless-stopped
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro

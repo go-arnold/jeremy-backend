@@ -1,11 +1,19 @@
 # MediaMTX config — self-hosted replacement for Cloudflare Stream Live.
 # Mounted read-only into the `mediamtx` service (see docker-compose.yaml).
+# Requires the `-ffmpeg` image variant (see docker-compose.yaml) — runOnReady below shells out
+# to ffmpeg, which the plain `FROM scratch` image cannot do.
 
 rtmp: yes
 rtmpAddress: :1935
 
 hls: yes
 hlsAddress: :8888
+# mpegts (not the newer low-latency/fMP4 default) avoids chunked/part long-polling behavior that
+# interacts badly with a plain reverse-proxy buffer — one of the two contributors (alongside
+# stream_key reuse, fixed in apps/streaming/services.py) to the "stream repeats itself" bug.
+hlsVariant: mpegts
+hlsSegmentCount: 5
+hlsSegmentDuration: 2s
 
 # Internal-only (never published to the host) — used by apps/streaming/client.py's
 # kick_publisher() (force-disconnect on end_live) and list_ready_stream_keys() (polled every
@@ -16,6 +24,24 @@ hlsAddress: :8888
 api: yes
 apiAddress: :9997
 
-# Only "live/<stream_key>" paths are accepted — anything else is rejected by MediaMTX outright.
+# Every broadcast pushes to "live/<media_type>_<key>" (apps/streaming/services.py generates the
+# key with that prefix). Each path pattern below transcodes the raw ingest into a
+# quality/bitrate-controlled copy republished under "processed/<key>" — the ONLY path ever
+# exposed for HLS playback (see apps/streaming/client.py build_playback_url). Viewers never see
+# the raw ingest directly, so bad broadcaster-side bitrate/encoding never reaches them as-is.
 paths:
-  "~^live/(.+)$":
+  # Radio/Emissions/LiveMusic — audio-only. Strips video (-vn) and transcodes to AAC
+  # 128kbps/44.1kHz: solid audio quality without the mobile-data cost of carrying video.
+  "~^live/audio_(.+)$":
+    runOnReady: ffmpeg -i rtmp://localhost:1935/$MTX_PATH -vn -c:a aac -b:a 128k -ar 44100 -f flv rtmp://localhost:1935/processed/$MTX_PATH
+    runOnReadyRestart: yes
+
+  # WebTV — video. Re-encodes to a controlled 720p/1.5Mbps ceiling (down from whatever
+  # bitrate/resolution OBS pushes raw) plus the same AAC audio track.
+  "~^live/video_(.+)$":
+    runOnReady: ffmpeg -i rtmp://localhost:1935/$MTX_PATH -c:v libx264 -preset veryfast -b:v 1500k -maxrate 1500k -bufsize 3000k -vf scale=-2:720 -c:a aac -b:a 128k -f flv rtmp://localhost:1935/processed/$MTX_PATH
+    runOnReadyRestart: yes
+
+  # Transcoded output landing path — republished here by the ffmpeg hooks above, this is what
+  # HLS/playback is actually served from.
+  "~^processed/(.+)$":

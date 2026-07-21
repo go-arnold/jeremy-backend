@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.media_uploads.fields import CloudinaryUrlField
+
 from .models import RadioChat, RadioProgram
 
 
@@ -31,6 +33,8 @@ class RadioProgramSerializer(serializers.ModelSerializer):
 
 
 class RadioProgramWriteSerializer(serializers.ModelSerializer):
+    cover = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
     class Meta:
         model = RadioProgram
         fields = [

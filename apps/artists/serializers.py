@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.media_uploads.fields import CloudinaryUrlField
+
 from .models import Artist, ArtistPhoto, ArtistVideo, Genre, Release
 
 
@@ -50,6 +52,40 @@ class ArtistPhotoSerializer(serializers.ModelSerializer):
 
     def get_image_url(self, obj):
         return obj.image.url if obj.image else None
+
+
+class ReleaseWriteSerializer(serializers.ModelSerializer):
+    cover = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
+    class Meta:
+        model = Release
+        fields = [
+            "title",
+            "slug",
+            "cover",
+            "release_date",
+            "format",
+            "streaming_links",
+            "description",
+            "preview_url",
+        ]
+        extra_kwargs = {"slug": {"required": False}}
+
+
+class ArtistVideoWriteSerializer(serializers.ModelSerializer):
+    thumbnail = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
+    class Meta:
+        model = ArtistVideo
+        fields = ["title", "thumbnail", "video_url", "duration", "published_at", "order"]
+
+
+class ArtistPhotoWriteSerializer(serializers.ModelSerializer):
+    image = CloudinaryUrlField(resource_type="image")
+
+    class Meta:
+        model = ArtistPhoto
+        fields = ["image", "caption", "order"]
 
 
 class ArtistListSerializer(serializers.ModelSerializer):
@@ -117,6 +153,9 @@ class ArtistDetailSerializer(serializers.ModelSerializer):
 
 
 class ArtistWriteSerializer(serializers.ModelSerializer):
+    photo = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+    cover_image = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
     class Meta:
         model = Artist
         fields = [

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.artists.serializers import ArtistListSerializer
+from apps.media_uploads.fields import CloudinaryUrlField
 
 from .models import City, Event, EventScheduleItem
 
@@ -94,6 +95,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
 
 
 class EventWriteSerializer(serializers.ModelSerializer):
+    image = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
     class Meta:
         model = Event
         fields = [

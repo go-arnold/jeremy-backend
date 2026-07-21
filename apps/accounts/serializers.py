@@ -1,10 +1,25 @@
+from cloudinary.utils import cloudinary_url
 from dj_rest_auth.registration.serializers import RegisterSerializer as BaseRegisterSerializer
 from dj_rest_auth.serializers import UserDetailsSerializer
 from rest_framework import serializers
 
+from apps.media_uploads.fields import CloudinaryUrlField
 from apps.realtime.presence import is_user_online
 
 from .models import ListenHistory, User
+
+
+def _resolve_cloudinary_url(field_value):
+    if not field_value:
+        return None
+    if hasattr(field_value, "url"):
+        return field_value.url
+    # Same-request PATCH: CloudinaryField only becomes a `CloudinaryResource` (with `.url`)
+    # once reloaded from the DB — right after a save, this is still the plain public_id string
+    # `CloudinaryUrlField` normalized the input down to, so the URL has to be built from it
+    # directly instead of returning that bare public_id (which isn't a valid URL at all).
+    url, _options = cloudinary_url(field_value, resource_type="image", secure=True)
+    return url
 
 
 class RegisterSerializer(BaseRegisterSerializer):
@@ -28,10 +43,12 @@ class UserSerializer(UserDetailsSerializer):
     is_online = serializers.SerializerMethodField()
     # Write-only counterparts: the frontend uploads the file to Cloudinary directly (via the
     # signed upload-signature flow, same as community media) and PATCHes the resulting
-    # `secure_url` here — CloudinaryField accepts a plain URL string assignment directly and
-    # derives its own delivery URL from it, no server-side file upload involved.
-    avatar = serializers.URLField(write_only=True, required=False, allow_blank=True)
-    cover_image = serializers.URLField(write_only=True, required=False, allow_blank=True)
+    # `secure_url` here. `CloudinaryUrlField` verifies it's a real asset on our own account and
+    # reduces it to a bare public_id before storage — a plain `URLField` used to accept (and
+    # store) any string verbatim, including malformed/truncated pastes or http:// URLs, which
+    # Cloudinary's SDK then echoed straight back to clients unmodified.
+    avatar = CloudinaryUrlField(resource_type="image", write_only=True, required=False, allow_blank=True)
+    cover_image = CloudinaryUrlField(resource_type="image", write_only=True, required=False, allow_blank=True)
 
     class Meta(UserDetailsSerializer.Meta):
         model = User
@@ -53,21 +70,11 @@ class UserSerializer(UserDetailsSerializer):
         ]
         read_only_fields = ["id", "email", "role", "is_verified", "listen_count", "created_at"]
 
-    # Right after this serializer's own `update()` writes a plain URL string into `avatar`/
-    # `cover_image`, the in-memory instance still holds that raw string (CloudinaryField only
-    # normalizes it into a `CloudinaryResource` — with a `.url` property — once reloaded from
-    # the DB), so `to_representation` immediately after a PATCH sees a plain `str` here, not a
-    # `CloudinaryResource`. Handled defensively rather than forcing a `refresh_from_db()` on
-    # every read.
     def get_cover_image_url(self, obj):
-        if not obj.cover_image:
-            return None
-        return obj.cover_image.url if hasattr(obj.cover_image, "url") else str(obj.cover_image)
+        return _resolve_cloudinary_url(obj.cover_image)
 
     def get_avatar_url(self, obj):
-        if not obj.avatar:
-            return None
-        return obj.avatar.url if hasattr(obj.avatar, "url") else str(obj.avatar)
+        return _resolve_cloudinary_url(obj.avatar)
 
     def get_is_online(self, obj):
         """Computed live from WebSocket presence (apps.realtime.presence), not stored — true as

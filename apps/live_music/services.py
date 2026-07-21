@@ -40,7 +40,7 @@ def delete_session(session: MusicLiveSession) -> None:
 
 @transaction.atomic
 def start_live(session: MusicLiveSession) -> MusicLiveSession:
-    fields = streaming_services.start_live_input(session.title, existing_key=session.stream_key)
+    fields = streaming_services.start_live_input(session.title, media_type="audio")
     for attr, value in fields.items():
         setattr(session, attr, value)
     session.status = MusicLiveSession.STATUS_LIVE

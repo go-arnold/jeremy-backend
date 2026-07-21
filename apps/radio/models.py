@@ -31,7 +31,9 @@ class RadioProgram(LiveStreamFields):
     day_of_week = models.PositiveSmallIntegerField(choices=DAY_CHOICES, default=0, db_index=True)
     presenter = models.CharField(max_length=100, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_UPCOMING, db_index=True)
-    stream_url = models.URLField(blank=True)
+    # Default URLField max_length (200) truncates/rejects real-world Cloudinary/CDN URLs with
+    # long public_ids or transformation strings — widened as a safety margin.
+    stream_url = models.URLField(max_length=500, blank=True)
     listener_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

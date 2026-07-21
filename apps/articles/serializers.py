@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from apps.media_uploads.fields import CloudinaryUrlField
+
 from .models import Article, Category, Comment, Tag
 
 User = get_user_model()
@@ -102,10 +104,28 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
         return obj.featured_image.url if obj.featured_image else None
 
 
+class CategoryField(serializers.PrimaryKeyRelatedField):
+    """Accepts either a numeric Category id or its slug — `Article.category` is nullable at the
+    DB level (on_delete=SET_NULL), but DRF's auto-generated field derives `required=True` from
+    the FK's `blank` attribute, which was never set. That mismatch made a missing/empty category
+    hard-fail creation instead of falling back to "uncategorized"; declaring the field explicitly
+    with required=False fixes that, and the slug fallback tolerates either identifier shape."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, str) and not data.isdigit():
+            try:
+                return self.get_queryset().get(slug=data)
+            except Category.DoesNotExist:
+                self.fail("does_not_exist", pk_value=data)
+        return super().to_internal_value(data)
+
+
 class ArticleWriteSerializer(serializers.ModelSerializer):
     # Optional: only an admin may set this explicitly (enforced in the view,
     # not here) — everyone else is authored as the connected user.
     author = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+    featured_image = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+    category = CategoryField(queryset=Category.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = Article
@@ -137,9 +157,7 @@ class ArticleBulkUpdateItemSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=300, required=False)
     excerpt = serializers.CharField(required=False, allow_blank=True)
     content = serializers.CharField(required=False)
-    category = serializers.PrimaryKeyRelatedField(
-        queryset=Category.objects.all(), required=False, allow_null=True
-    )
+    category = CategoryField(queryset=Category.objects.all(), required=False, allow_null=True)
     article_type = serializers.ChoiceField(choices=Article.TYPE_CHOICES, required=False)
     status = serializers.ChoiceField(choices=Article.STATUS_CHOICES, required=False)
     is_featured = serializers.BooleanField(required=False)

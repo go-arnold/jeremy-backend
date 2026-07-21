@@ -167,6 +167,11 @@ cloudinary.config(
     cloud_name=config("CLOUDINARY_CLOUD_NAME"),
     api_key=config("CLOUDINARY_API_KEY"),
     api_secret=config("CLOUDINARY_API_SECRET"),
+    # Without this, freshly-generated URLs (built from a clean public_id) silently default to
+    # non-secure http:// — this only guards URLs the SDK actually builds itself; a raw URL
+    # string stored directly in a CloudinaryField is echoed back unmodified regardless (see
+    # apps.media_uploads.fields.CloudinaryUrlField for that half of the fix).
+    secure=True,
 )
 
 DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"

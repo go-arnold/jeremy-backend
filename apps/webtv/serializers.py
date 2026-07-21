@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
+from apps.media_uploads.fields import CloudinaryUrlField
 from apps.media_uploads.validation import verify_cloudinary_asset
 
 from .models import WebTVVideo
@@ -36,6 +37,7 @@ class VideoListSerializer(serializers.ModelSerializer):
 
 class VideoDetailSerializer(serializers.ModelSerializer):
     thumbnail_url = serializers.SerializerMethodField()
+    artist_names = serializers.SerializerMethodField()
     like_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
 
@@ -54,6 +56,7 @@ class VideoDetailSerializer(serializers.ModelSerializer):
             "is_premier",
             "is_live",
             "location",
+            "artist_names",
             "view_count",
             "like_count",
             "comment_count",
@@ -62,6 +65,9 @@ class VideoDetailSerializer(serializers.ModelSerializer):
 
     def get_thumbnail_url(self, obj):
         return obj.thumbnail.url if obj.thumbnail else None
+
+    def get_artist_names(self, obj):
+        return [a.name for a in obj.artists.all()]
 
     # Single-object endpoint (retrieve only) — safe to compute directly here, unlike a list
     # serializer where this would be an N+1 (see CommunityPostSerializer.get_comment_count for
@@ -81,6 +87,8 @@ class VideoDetailSerializer(serializers.ModelSerializer):
 
 
 class VideoWriteSerializer(serializers.ModelSerializer):
+    thumbnail = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
     class Meta:
         model = WebTVVideo
         fields = [

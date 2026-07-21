@@ -1,15 +1,17 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
+from apps.media_uploads.fields import CloudinaryUrlField
 from apps.media_uploads.validation import validate_media_items
 
-from .models import Challenge, CommunityPost, Poll, PollOption
+from .models import Challenge, ChallengeParticipant, CommunityPost, Poll, PollOption
 
 
 class CommunityPostSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source="author.username", read_only=True)
     author_avatar = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
+    challenge = serializers.SlugRelatedField(slug_field="slug", read_only=True)
 
     class Meta:
         model = CommunityPost
@@ -21,6 +23,8 @@ class CommunityPostSerializer(serializers.ModelSerializer):
             "content",
             "media",
             "post_type",
+            "challenge",
+            "is_pinned_result",
             "like_count",
             "comment_count",
             "created_at",
@@ -76,6 +80,7 @@ class TalentSubmissionSerializer(serializers.Serializer):
 
 class ChallengeSerializer(serializers.ModelSerializer):
     cover_url = serializers.SerializerMethodField()
+    has_participated = serializers.SerializerMethodField()
 
     class Meta:
         model = Challenge
@@ -89,10 +94,38 @@ class ChallengeSerializer(serializers.ModelSerializer):
             "deadline",
             "participant_count",
             "is_active",
+            "has_participated",
         ]
 
     def get_cover_url(self, obj):
         return obj.cover.url if obj.cover else None
+
+    def get_has_participated(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        return ChallengeParticipant.objects.filter(challenge=obj, user=user).exists()
+
+
+class ChallengeParticipationSerializer(serializers.Serializer):
+    """Same shape as `TalentSubmissionSerializer` — a challenge response is a talent
+    submission that also happens to be tied to a challenge (see participate/ action)."""
+
+    title = serializers.CharField(max_length=200)
+    content = serializers.CharField(max_length=2000)
+    media = serializers.ListField(child=serializers.JSONField(), min_length=1, max_length=1)
+
+    def validate_media(self, value):
+        allowed = {"song", "video", "image"}
+        for item in value:
+            if not isinstance(item, dict) or item.get("type") not in allowed:
+                raise serializers.ValidationError(
+                    "Chaque média doit être une image, une chanson ou une vidéo "
+                    "(type: 'image' | 'song' | 'video')."
+                )
+        validate_media_items(value)
+        return value
 
 
 class PollOptionSerializer(serializers.ModelSerializer):
@@ -112,6 +145,8 @@ class PollSerializer(serializers.ModelSerializer):
 
 
 class ChallengeWriteSerializer(serializers.ModelSerializer):
+    cover = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
     class Meta:
         model = Challenge
         fields = ["title", "slug", "description", "cover", "prize", "deadline", "is_active"]

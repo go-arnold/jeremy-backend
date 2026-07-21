@@ -1,13 +1,60 @@
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from apps.artists.models import Artist
 from apps.engagement.services import engagement_counts
+from apps.media_uploads.fields import CloudinaryUrlField
 from apps.media_uploads.validation import verify_cloudinary_asset
 
 from .models import PodcastEpisode, PodcastSeries
 
+User = get_user_model()
+
+
+class GuestSerializer(serializers.Serializer):
+    """A podcast guest: always has a display `name` ("jina") regardless of whether they're
+    linked to an existing Artist, an existing User, or neither (pure freeform mention)."""
+
+    name = serializers.CharField(max_length=150)
+    artist_id = serializers.PrimaryKeyRelatedField(
+        source="artist", queryset=Artist.objects.all(), required=False, allow_null=True
+    )
+    user_id = serializers.PrimaryKeyRelatedField(
+        source="user", queryset=User.objects.all(), required=False, allow_null=True
+    )
+
+    def validate(self, attrs):
+        if attrs.get("artist") and attrs.get("user"):
+            raise serializers.ValidationError(
+                "Un invité est soit un artiste, soit un utilisateur, pas les deux."
+            )
+        return attrs
+
+    def to_internal_value(self, data):
+        attrs = super().to_internal_value(data)
+        artist = attrs.pop("artist", None)
+        user = attrs.pop("user", None)
+        return {
+            "name": attrs["name"],
+            "artist_id": artist.pk if artist else None,
+            "user_id": user.pk if user else None,
+        }
+
+    def to_representation(self, instance):
+        # `instance` is the plain dict already stored in this exact {name, artist_id, user_id}
+        # shape (see to_internal_value) — nothing to resolve. Declared fields' own
+        # to_representation is bypassed here on purpose: PrimaryKeyRelatedField expects a model
+        # instance to pull `.pk` from, not the already-plain int/None this stores as.
+        return {
+            "name": instance.get("name", ""),
+            "artist_id": instance.get("artist_id"),
+            "user_id": instance.get("user_id"),
+        }
+
 
 class PodcastSeriesListSerializer(serializers.ModelSerializer):
     cover_url = serializers.SerializerMethodField()
+    audio_url = serializers.SerializerMethodField()
 
     class Meta:
         model = PodcastSeries
@@ -17,7 +64,10 @@ class PodcastSeriesListSerializer(serializers.ModelSerializer):
             "slug",
             "description",
             "cover_url",
+            "audio_url",
+            "duration",
             "category",
+            "is_series",
             "is_featured",
             "episode_count",
         ]
@@ -25,11 +75,17 @@ class PodcastSeriesListSerializer(serializers.ModelSerializer):
     def get_cover_url(self, obj):
         return obj.cover.url if obj.cover else None
 
+    def get_audio_url(self, obj):
+        if obj.audio_file:
+            return obj.audio_file.url
+        return obj.audio_url or None
+
 
 class EpisodeListSerializer(serializers.ModelSerializer):
     cover_url = serializers.SerializerMethodField()
     series_title = serializers.CharField(source="series.title", read_only=True)
     series_slug = serializers.CharField(source="series.slug", read_only=True)
+    guests = GuestSerializer(many=True, read_only=True)
 
     class Meta:
         model = PodcastEpisode
@@ -47,6 +103,7 @@ class EpisodeListSerializer(serializers.ModelSerializer):
             "published_at",
             "series_title",
             "series_slug",
+            "guests",
         ]
 
     def get_cover_url(self, obj):
@@ -57,6 +114,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
     cover_url = serializers.SerializerMethodField()
     audio_url = serializers.SerializerMethodField()
     series = PodcastSeriesListSerializer(read_only=True)
+    guests = GuestSerializer(many=True, read_only=True)
     like_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
 
@@ -106,6 +164,10 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
 
 
 class EpisodeWriteSerializer(serializers.ModelSerializer):
+    cover = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+    audio_file = CloudinaryUrlField(resource_type="video", required=False, allow_blank=True)
+    guests = GuestSerializer(many=True, required=False)
+
     class Meta:
         model = PodcastEpisode
         fields = [
@@ -133,10 +195,28 @@ class EpisodeWriteSerializer(serializers.ModelSerializer):
 
 
 class PodcastSeriesWriteSerializer(serializers.ModelSerializer):
+    cover = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+    audio_file = CloudinaryUrlField(resource_type="video", required=False, allow_blank=True)
+
     class Meta:
         model = PodcastSeries
-        fields = ["title", "slug", "description", "cover", "category", "is_featured"]
+        fields = [
+            "title",
+            "slug",
+            "description",
+            "cover",
+            "audio_file",
+            "audio_url",
+            "duration",
+            "category",
+            "is_featured",
+        ]
         extra_kwargs = {"slug": {"required": False}}
+
+    def validate_audio_url(self, value):
+        if value:
+            verify_cloudinary_asset(value, "video")
+        return value
 
 
 class SeriesBulkUpdateItemSerializer(serializers.Serializer):
@@ -162,7 +242,7 @@ class EpisodeBulkUpdateItemSerializer(serializers.Serializer):
     duration = serializers.CharField(max_length=10, required=False, allow_blank=True)
     episode_number = serializers.IntegerField(min_value=1, required=False)
     season_number = serializers.IntegerField(min_value=1, required=False)
-    guests = serializers.JSONField(required=False)
+    guests = GuestSerializer(many=True, required=False)
     is_featured = serializers.BooleanField(required=False)
     published_at = serializers.DateTimeField(required=False)
 
