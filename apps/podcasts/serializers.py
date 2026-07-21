@@ -41,10 +41,15 @@ class GuestSerializer(serializers.Serializer):
         }
 
     def to_representation(self, instance):
-        # `instance` is the plain dict already stored in this exact {name, artist_id, user_id}
-        # shape (see to_internal_value) — nothing to resolve. Declared fields' own
-        # to_representation is bypassed here on purpose: PrimaryKeyRelatedField expects a model
-        # instance to pull `.pk` from, not the already-plain int/None this stores as.
+        # `guests` was an unvalidated free-form JSONField before this serializer existed, so
+        # rows written before this change can hold a bare string (or anything else) instead of
+        # the {name, artist_id, user_id} dict shape `to_internal_value` now produces — the
+        # frontend's own parser already defends against exactly this. Without this fallback,
+        # any pre-existing episode with a plain-string guest 500s the whole list/detail endpoint.
+        if isinstance(instance, str):
+            return {"name": instance, "artist_id": None, "user_id": None}
+        if not isinstance(instance, dict):
+            return {"name": "", "artist_id": None, "user_id": None}
         return {
             "name": instance.get("name", ""),
             "artist_id": instance.get("artist_id"),
