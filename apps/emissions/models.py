@@ -19,7 +19,9 @@ class Emission(LiveStreamFields, Engageable):
     slug = models.SlugField(max_length=220, unique=True)
     description = models.TextField(blank=True)
     cover = CloudinaryField("cover", blank=True, null=True)
-    stream_url = models.URLField(blank=True)
+    # Default URLField max_length (200) truncates/rejects real-world Cloudinary/CDN URLs with
+    # long public_ids or transformation strings — widened as a safety margin.
+    stream_url = models.URLField(max_length=500, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_SCHEDULED, db_index=True)
     scheduled_at = models.DateTimeField(null=True, blank=True, db_index=True)
     duration_minutes = models.PositiveSmallIntegerField(default=60)

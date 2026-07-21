@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
+from apps.media_uploads.fields import CloudinaryUrlField
 from apps.realtime import presence
 
 from .models import MusicLiveSession, MusicLiveSlot
@@ -51,6 +52,8 @@ class MusicLiveSessionSerializer(serializers.ModelSerializer):
 
 
 class MusicLiveSessionWriteSerializer(serializers.ModelSerializer):
+    cover = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
     class Meta:
         model = MusicLiveSession
         fields = ["title", "slug", "cover", "artists", "status", "scheduled_at"]
@@ -81,6 +84,8 @@ class MusicLiveSlotSerializer(serializers.ModelSerializer):
 
 
 class MusicLiveSlotWriteSerializer(serializers.ModelSerializer):
+    cover = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
     class Meta:
         model = MusicLiveSlot
         fields = ["title", "cover", "artist", "day_of_week", "start_time", "end_time", "duration_minutes"]

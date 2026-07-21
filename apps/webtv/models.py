@@ -25,7 +25,9 @@ class WebTVVideo(LiveStreamFields, Engageable):
     slug = models.SlugField(max_length=320, unique=True)
     description = models.TextField(blank=True)
     thumbnail = CloudinaryField("thumbnail", blank=True, null=True)
-    video_url = models.URLField()
+    # Default URLField max_length (200) truncates/rejects real-world Cloudinary/CDN URLs with
+    # long public_ids or transformation strings — widened as a safety margin.
+    video_url = models.URLField(max_length=500)
     duration = models.CharField(max_length=10, blank=True)
     category = models.CharField(max_length=30, choices=CATEGORY_CHOICES, db_index=True)
     is_premier = models.BooleanField(default=False, db_index=True)

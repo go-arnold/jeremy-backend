@@ -25,7 +25,7 @@ def get_live_emission():
 
 @transaction.atomic
 def start_live(emission: Emission) -> Emission:
-    fields = streaming_services.start_live_input(emission.title, existing_key=emission.stream_key)
+    fields = streaming_services.start_live_input(emission.title, media_type="audio")
     for attr, value in fields.items():
         setattr(emission, attr, value)
     emission.status = Emission.STATUS_LIVE

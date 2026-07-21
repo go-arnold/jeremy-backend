@@ -3,17 +3,25 @@ from django.conf import settings
 
 
 def build_playback_url(stream_key: str) -> str:
-    return f"{settings.MEDIAMTX_HLS_BASE_URL}/live/{stream_key}/index.m3u8"
+    # Served from "processed/<key>", not "live/<key>" — the raw ingest path is transcode-input
+    # only (see mediamtx.yml's runOnReady ffmpeg hooks); viewers always get the re-encoded,
+    # quality/bitrate-controlled copy ffmpeg republishes under "processed/".
+    return f"{settings.MEDIAMTX_HLS_BASE_URL}/processed/{stream_key}/index.m3u8"
 
 
 def kick_publisher(stream_key: str) -> None:
     """Best-effort force-disconnect of an active publisher via MediaMTX's HTTP API. Never
     raises: there may be no active publisher (nothing to kick), or the API may be briefly
-    unreachable — either way `end_live` must still succeed on our own DB state."""
-    try:
-        requests.post(f"{settings.MEDIAMTX_API_URL}/v3/paths/kick/live/{stream_key}", timeout=5)
-    except requests.RequestException:
-        pass
+    unreachable — either way `end_live` must still succeed on our own DB state.
+
+    Kicks both the raw ingest path and its ffmpeg-republished "processed" copy, so ending a
+    broadcast fully tears down both instead of leaving "processed/<key>" registered after its
+    source vanishes (a contributor to the "stale stream repeats" bug — see start_live_input)."""
+    for prefix in ("live", "processed"):
+        try:
+            requests.post(f"{settings.MEDIAMTX_API_URL}/v3/paths/kick/{prefix}/{stream_key}", timeout=5)
+        except requests.RequestException:
+            pass
 
 
 def list_ready_stream_keys():

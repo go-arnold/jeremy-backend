@@ -9,10 +9,12 @@ class CommunityPost(Engageable):
     TYPE_TALENT = "talent"
     TYPE_ART = "art"
     TYPE_NEWS = "news"
+    TYPE_CHALLENGE_RESPONSE = "challenge_response"
     TYPE_CHOICES = [
         (TYPE_TALENT, "Talent"),
         (TYPE_ART, "Art"),
         (TYPE_NEWS, "News"),
+        (TYPE_CHALLENGE_RESPONSE, "Challenge Response"),
     ]
 
     author = models.ForeignKey(
@@ -22,13 +24,20 @@ class CommunityPost(Engageable):
     content = models.TextField(max_length=2000)
     media = models.JSONField(default=list, blank=True)
     post_type = models.CharField(max_length=20, choices=TYPE_CHOICES, db_index=True)
+    challenge = models.ForeignKey(
+        "Challenge", null=True, blank=True, on_delete=models.CASCADE, related_name="responses"
+    )
+    is_pinned_result = models.BooleanField(default=False)
     like_count = models.PositiveIntegerField(default=0)
     comment_count = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["post_type", "-created_at"])]
+        indexes = [
+            models.Index(fields=["post_type", "-created_at"]),
+            models.Index(fields=["challenge", "-created_at"]),
+        ]
 
     def __str__(self):
         return f"{self.author} — {self.post_type}"

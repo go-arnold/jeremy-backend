@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
+from apps.media_uploads.fields import CloudinaryUrlField
 from apps.media_uploads.validation import verify_cloudinary_asset
 
 from .models import MusicRelease
@@ -68,6 +69,8 @@ class ReleaseDetailSerializer(serializers.ModelSerializer):
 
 
 class ReleaseWriteSerializer(serializers.ModelSerializer):
+    cover = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
     class Meta:
         model = MusicRelease
         fields = [

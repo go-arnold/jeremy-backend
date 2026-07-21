@@ -28,7 +28,9 @@ class MusicRelease(Engageable):
     is_premiere = models.BooleanField(default=False)
     streaming_links = models.JSONField(default=dict, blank=True)
     description = models.TextField(blank=True)
-    preview_url = models.URLField(blank=True)
+    # Default URLField max_length (200) truncates/rejects real-world Cloudinary/CDN URLs with
+    # long public_ids or transformation strings — widened as a safety margin.
+    preview_url = models.URLField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -35,6 +35,41 @@ def join_challenge(challenge: Challenge, user) -> dict:
 
 
 @transaction.atomic
+def participate_in_challenge(challenge: Challenge, user, *, title: str, content: str, media: list) -> dict:
+    """Records participation (same one-shot-per-user semantics as join_challenge) AND creates
+    the CommunityPost the participation renders as — has_participated (ChallengeSerializer)
+    depends on the ChallengeParticipant row this also writes."""
+    _, created = ChallengeParticipant.objects.get_or_create(challenge=challenge, user=user)
+    if not created:
+        return {"error": "already_joined"}
+    Challenge.objects.filter(pk=challenge.pk).update(participant_count=F("participant_count") + 1)
+    post = CommunityPost.objects.create(
+        author=user,
+        title=title,
+        content=content,
+        media=media,
+        post_type=CommunityPost.TYPE_CHALLENGE_RESPONSE,
+        challenge=challenge,
+    )
+    return {"post": post}
+
+
+@transaction.atomic
+def publish_challenge_result(
+    challenge: Challenge, user, *, title: str, content: str, media: list
+) -> CommunityPost:
+    return CommunityPost.objects.create(
+        author=user,
+        title=title,
+        content=content,
+        media=media,
+        post_type=CommunityPost.TYPE_CHALLENGE_RESPONSE,
+        challenge=challenge,
+        is_pinned_result=True,
+    )
+
+
+@transaction.atomic
 def create_challenge(validated_data: dict) -> Challenge:
     return Challenge.objects.create(**validated_data)
 

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
+from apps.media_uploads.fields import CloudinaryUrlField
 
 from .models import Emission
 
@@ -69,6 +70,8 @@ class EmissionDetailSerializer(serializers.ModelSerializer):
 
 
 class EmissionWriteSerializer(serializers.ModelSerializer):
+    cover = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+
     class Meta:
         model = Emission
         fields = [

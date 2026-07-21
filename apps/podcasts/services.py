@@ -68,6 +68,12 @@ def bulk_delete_series(ids: list) -> int:
 def create_episode(validated_data: dict) -> PodcastEpisode:
     episode = PodcastEpisode.objects.create(**validated_data)
     PodcastSeries.objects.filter(pk=episode.series_id).update(episode_count=F("episode_count") + 1)
+    # A series only becomes a "real" multi-episode series once a second episode is attached —
+    # the first episode is equivalent to the standalone-podcast case. One-way promotion: never
+    # flipped back to False if the episode count later drops (matches is_featured-style flags).
+    PodcastSeries.objects.filter(pk=episode.series_id, episode_count__gte=2, is_series=False).update(
+        is_series=True
+    )
     return episode
 
 
@@ -106,6 +112,9 @@ def bulk_create_episodes(items: list) -> list:
                 *[When(pk=sid, then=Value(cnt)) for sid, cnt in counts.items()],
                 output_field=IntegerField(),
             )
+        )
+        PodcastSeries.objects.filter(pk__in=counts.keys(), episode_count__gte=2, is_series=False).update(
+            is_series=True
         )
     return created
 

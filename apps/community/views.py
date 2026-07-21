@@ -16,6 +16,7 @@ from .models import Challenge, CommunityPost, Poll
 from .serializers import (
     ChallengeBulkCreateSerializer,
     ChallengeBulkUpdateSerializer,
+    ChallengeParticipationSerializer,
     ChallengeSerializer,
     CommunityPostSerializer,
     CommunityPostWriteSerializer,
@@ -32,9 +33,14 @@ class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
 
     def get_queryset(self):
         qs = CommunityPost.objects.select_related("author")
-        post_type = self.request.query_params.get("type")
+        # "post_type" is the documented/frontend-used param name (COMMUNAUTE_BACKEND_
+        # REQUIREMENTS.md §3.2/3.1bis); "type" is kept as an alias for any existing caller.
+        post_type = self.request.query_params.get("post_type") or self.request.query_params.get("type")
         if post_type:
             qs = qs.filter(post_type=post_type)
+        challenge_slug = self.request.query_params.get("challenge")
+        if challenge_slug:
+            qs = qs.filter(challenge__slug=challenge_slug)
         # Annotated so CommunityPostSerializer.get_comment_count avoids running 4 separate
         # engagement COUNT queries per post on every paginated list request.
         qs = qs.annotate(
@@ -156,6 +162,27 @@ class ChallengeViewSet(UploadThrottleMixin, ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response({"detail": "Participation enregistrée."}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def participate(self, request, slug=None):
+        challenge = self.get_object()
+        ser = ChallengeParticipationSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        result = services.participate_in_challenge(challenge, request.user, **ser.validated_data)
+        if result.get("error") == "already_joined":
+            return Response(
+                {"detail": "Vous participez déjà à ce défi.", "code": "already_joined"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(CommunityPostSerializer(result["post"]).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
+    def publish_result(self, request, slug=None):
+        challenge = self.get_object()
+        ser = ChallengeParticipationSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        post = services.publish_challenge_result(challenge, request.user, **ser.validated_data)
+        return Response(CommunityPostSerializer(post).data, status=status.HTTP_201_CREATED)
 
 
 @extend_schema(tags=["Community"])

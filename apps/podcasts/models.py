@@ -20,6 +20,14 @@ class PodcastSeries(models.Model):
     description = models.TextField(blank=True)
     cover = CloudinaryField("cover", blank=True, null=True)
     category = models.CharField(max_length=30, choices=CATEGORY_CHOICES, db_index=True)
+    # A series with no episodes and its own audio set IS the standalone-podcast experience;
+    # is_series flips true once a real multi-episode series forms (see services.create_episode).
+    audio_file = CloudinaryField("audio_file", resource_type="raw", blank=True, null=True)
+    # Default URLField max_length (200) truncates/rejects real-world Cloudinary/CDN URLs with
+    # long public_ids or transformation strings — widened as a safety margin.
+    audio_url = models.URLField(max_length=500, blank=True)
+    duration = models.CharField(max_length=10, blank=True)
+    is_series = models.BooleanField(default=False, db_index=True)
     is_featured = models.BooleanField(default=False, db_index=True)
     episode_count = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -45,7 +53,9 @@ class PodcastEpisode(Engageable):
     description = models.TextField(blank=True)
     cover = CloudinaryField("cover", blank=True, null=True)
     audio_file = CloudinaryField("audio_file", resource_type="raw", blank=True, null=True)
-    audio_url = models.URLField(blank=True)
+    # Default URLField max_length (200) truncates/rejects real-world Cloudinary/CDN URLs with
+    # long public_ids or transformation strings — widened as a safety margin.
+    audio_url = models.URLField(max_length=500, blank=True)
     duration = models.CharField(max_length=10, blank=True)
     episode_number = models.PositiveSmallIntegerField(default=1)
     season_number = models.PositiveSmallIntegerField(default=1)

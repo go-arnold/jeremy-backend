@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from drf_spectacular.utils import extend_schema
@@ -113,6 +114,9 @@ class PodcastEpisodeViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelVi
         series_slug = self.request.query_params.get("series")
         if series_slug:
             qs = qs.filter(series__slug=series_slug)
+        guest_artist = self.request.query_params.get("guest_artist")
+        if guest_artist and guest_artist.isdigit():
+            qs = qs.filter(Q(guests__contains=[{"artist_id": int(guest_artist)}]))
         is_featured = self.request.query_params.get("is_featured")
         if is_featured:
             qs = qs.filter(is_featured=is_featured.lower() == "true")

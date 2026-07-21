@@ -22,7 +22,7 @@ def get_premiers(limit: int = 5) -> list:
 
 @transaction.atomic
 def start_live(video: WebTVVideo) -> WebTVVideo:
-    fields = streaming_services.start_live_input(video.title, existing_key=video.stream_key)
+    fields = streaming_services.start_live_input(video.title, media_type="video")
     for attr, value in fields.items():
         setattr(video, attr, value)
     video.is_live = True

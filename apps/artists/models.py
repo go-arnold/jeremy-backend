@@ -75,7 +75,9 @@ class Release(models.Model):
     format = models.CharField(max_length=20, choices=FORMAT_CHOICES, default=FORMAT_ALBUM)
     streaming_links = models.JSONField(default=dict, blank=True)
     description = models.TextField(blank=True)
-    preview_url = models.URLField(blank=True)
+    # Default URLField max_length (200) truncates/rejects real-world Cloudinary/CDN URLs with
+    # long public_ids or transformation strings — widened as a safety margin.
+    preview_url = models.URLField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -90,7 +92,7 @@ class ArtistVideo(models.Model):
     artist = models.ForeignKey(Artist, on_delete=models.CASCADE, related_name="videos")
     title = models.CharField(max_length=200)
     thumbnail = CloudinaryField("thumbnail", blank=True, null=True)
-    video_url = models.URLField()
+    video_url = models.URLField(max_length=500)
     duration = models.CharField(max_length=10, blank=True)
     view_count = models.PositiveIntegerField(default=0)
     published_at = models.DateField(null=True, blank=True)

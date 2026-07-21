@@ -15,17 +15,20 @@ from core.throttling import UploadThrottleMixin
 
 from . import services
 from .filters import ArtistFilter
-from .models import Artist, Genre
+from .models import Artist, ArtistPhoto, ArtistVideo, Genre, Release
 from .serializers import (
     ArtistBulkCreateSerializer,
     ArtistBulkUpdateSerializer,
     ArtistDetailSerializer,
     ArtistListSerializer,
     ArtistPhotoSerializer,
+    ArtistPhotoWriteSerializer,
     ArtistVideoSerializer,
+    ArtistVideoWriteSerializer,
     ArtistWriteSerializer,
     GenreSerializer,
     ReleaseSerializer,
+    ReleaseWriteSerializer,
 )
 
 
@@ -82,23 +85,74 @@ class ArtistViewSet(UploadThrottleMixin, ModelViewSet):
         genres = Genre.objects.all()
         return Response(GenreSerializer(genres, many=True).data)
 
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["get", "post"])
     def releases(self, request, slug=None):
         artist = self.get_object()
+        if request.method == "POST":
+            ser = ReleaseWriteSerializer(data=request.data)
+            ser.is_valid(raise_exception=True)
+            release = services.create_release(artist, ser.validated_data)
+            return Response(ReleaseSerializer(release).data, status=status.HTTP_201_CREATED)
         qs = artist.releases.select_related("artist").order_by("-release_date")
         return Response(ReleaseSerializer(qs, many=True).data)
 
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["patch", "delete"], url_path=r"releases/(?P<release_id>\d+)")
+    def release_detail(self, request, slug=None, release_id=None):
+        artist = self.get_object()
+        release = get_object_or_404(Release, pk=release_id, artist=artist)
+        if request.method == "DELETE":
+            services.delete_release(release)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        ser = ReleaseWriteSerializer(release, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        updated = services.update_release(release, ser.validated_data)
+        return Response(ReleaseSerializer(updated).data)
+
+    @action(detail=True, methods=["get", "post"])
     def videos(self, request, slug=None):
         artist = self.get_object()
+        if request.method == "POST":
+            ser = ArtistVideoWriteSerializer(data=request.data)
+            ser.is_valid(raise_exception=True)
+            video = services.create_video(artist, ser.validated_data)
+            return Response(ArtistVideoSerializer(video).data, status=status.HTTP_201_CREATED)
         qs = artist.videos.order_by("order", "-published_at")
         return Response(ArtistVideoSerializer(qs, many=True).data)
 
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["patch", "delete"], url_path=r"videos/(?P<video_id>\d+)")
+    def video_detail(self, request, slug=None, video_id=None):
+        artist = self.get_object()
+        video = get_object_or_404(ArtistVideo, pk=video_id, artist=artist)
+        if request.method == "DELETE":
+            services.delete_video(video)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        ser = ArtistVideoWriteSerializer(video, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        updated = services.update_video(video, ser.validated_data)
+        return Response(ArtistVideoSerializer(updated).data)
+
+    @action(detail=True, methods=["get", "post"])
     def gallery(self, request, slug=None):
         artist = self.get_object()
+        if request.method == "POST":
+            ser = ArtistPhotoWriteSerializer(data=request.data)
+            ser.is_valid(raise_exception=True)
+            photo = services.create_photo(artist, ser.validated_data)
+            return Response(ArtistPhotoSerializer(photo).data, status=status.HTTP_201_CREATED)
         qs = artist.gallery.order_by("order")
         return Response(ArtistPhotoSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=["patch", "delete"], url_path=r"gallery/(?P<photo_id>\d+)")
+    def gallery_detail(self, request, slug=None, photo_id=None):
+        artist = self.get_object()
+        photo = get_object_or_404(ArtistPhoto, pk=photo_id, artist=artist)
+        if request.method == "DELETE":
+            services.delete_photo(photo)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        ser = ArtistPhotoWriteSerializer(photo, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        updated = services.update_photo(photo, ser.validated_data)
+        return Response(ArtistPhotoSerializer(updated).data)
 
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def bulk_create(self, request):
