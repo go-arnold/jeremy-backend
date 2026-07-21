@@ -2,7 +2,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
 from rest_framework import permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -30,6 +30,25 @@ RADIO_ROOM_ID = "live"
 
 
 @extend_schema(tags=["Radio"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouvelle émission radio",
+                value={
+                    "title": "Matinale du Kivu",
+                    "description": "L'actualité et la musique pour bien démarrer la journée.",
+                    "cover": "https://res.cloudinary.com/artdukivu/image/upload/v1721581234/radio/covers/matinale.jpg",
+                    "start_time": "07:00:00",
+                    "end_time": "09:00:00",
+                    "day_of_week": 0,
+                    "presenter": "Jean-Marc",
+                },
+                request_only=True,
+            )
+        ]
+    )
+)
 class RadioProgramViewSet(UploadThrottleMixin, ModelViewSet):
     queryset = RadioProgram.objects.all()
     permission_classes = [IsAdminOrReadOnly]
@@ -56,6 +75,21 @@ class RadioProgramViewSet(UploadThrottleMixin, ModelViewSet):
     def perform_destroy(self, instance):
         services.delete_program(instance)
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Diffusion démarrée",
+                value={
+                    "status": "live",
+                    "rtmp_server_url": "rtmp://art-du-kivu-api.kelor.tech:1935/live",
+                    "stream_key": "audio_3f9a1c2b7e4d5f60a1b2c3d4e5f60718",
+                    "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/audio_3f9a1c2b7e4d5f60a1b2c3d4e5f60718/index.m3u8",
+                },
+                response_only=True,
+                description="stream_key change à chaque appel — jamais réutilisé d'une diffusion à l'autre.",
+            )
+        ]
+    )
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def go_live(self, request, id=None):
         program = services.start_live(self.get_object())
@@ -68,6 +102,9 @@ class RadioProgramViewSet(UploadThrottleMixin, ModelViewSet):
             }
         )
 
+    @extend_schema(
+        examples=[OpenApiExample("Diffusion terminée", value={"status": "ended"}, response_only=True)]
+    )
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def end_live(self, request, id=None):
         program = services.end_live(self.get_object())
@@ -99,6 +136,15 @@ class RadioProgramViewSet(UploadThrottleMixin, ModelViewSet):
 
 
 @extend_schema(tags=["Radio"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouveau message", value={"content": "Super émission aujourd'hui !"}, request_only=True
+            )
+        ]
+    )
+)
 class RadioChatViewSet(ModelViewSet):
     pagination_class = SmallPagination
     http_method_names = ["get", "post", "delete"]
@@ -133,7 +179,7 @@ class RadioChatViewSet(ModelViewSet):
         instance.save(update_fields=["is_deleted"])
 
 
-@extend_schema(tags=["Radio"])
+@extend_schema(tags=["Radio"], responses=RadioProgramSerializer)
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
 def current_program(request):

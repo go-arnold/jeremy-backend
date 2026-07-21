@@ -21,13 +21,24 @@ class WebTVVideo(LiveStreamFields, Engageable):
         (CATEGORY_CONCERTS, "Concerts"),
     ]
 
+    MODE_PLAYOUT = "playout"
+    MODE_CAMERA = "camera"
+    BROADCAST_MODE_CHOICES = [
+        (MODE_PLAYOUT, "Playout"),
+        (MODE_CAMERA, "Caméra"),
+    ]
+
     title = models.CharField(max_length=300, db_index=True)
     slug = models.SlugField(max_length=320, unique=True)
     description = models.TextField(blank=True)
     thumbnail = CloudinaryField("thumbnail", blank=True, null=True)
     # Default URLField max_length (200) truncates/rejects real-world Cloudinary/CDN URLs with
     # long public_ids or transformation strings — widened as a safety margin.
-    video_url = models.URLField(max_length=500)
+    # blank=True: a "camera" broadcast_mode video has no file/URL of its own (it's the live feed
+    # itself, played via playback_hls_url) — previously worked around with a dummy placeholder
+    # URL since this field was required.
+    video_url = models.URLField(max_length=500, blank=True)
+    broadcast_mode = models.CharField(max_length=20, choices=BROADCAST_MODE_CHOICES, default=MODE_PLAYOUT)
     duration = models.CharField(max_length=10, blank=True)
     category = models.CharField(max_length=30, choices=CATEGORY_CHOICES, db_index=True)
     is_premier = models.BooleanField(default=False, db_index=True)

@@ -3,9 +3,11 @@ from django.urls import path
 from .views import UserViewSet
 
 urlpatterns = [
-    path("", UserViewSet.as_view({"get": "list"}), name="user_list"),
+    path("", UserViewSet.as_view({"get": "list", "post": "create"}), name="user_list"),
     path(
-        "<int:id>/", UserViewSet.as_view({"get": "retrieve", "patch": "partial_update"}), name="user_detail"
+        "<int:id>/",
+        UserViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
+        name="user_detail",
     ),
     path(
         "<int:id>/favorites/",

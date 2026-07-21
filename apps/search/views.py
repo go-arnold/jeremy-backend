@@ -1,4 +1,4 @@
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
 from elasticsearch import exceptions as es_exceptions
 from rest_framework import permissions, status
 from rest_framework.response import Response
@@ -17,6 +17,35 @@ from .serializers import SearchResponseSerializer
         OpenApiParameter("page_size", int, required=False),
     ],
     responses=SearchResponseSerializer,
+    examples=[
+        OpenApiExample(
+            "Résultats mixtes",
+            value={
+                "count": 2,
+                "page": 1,
+                "page_size": 20,
+                "results": [
+                    {
+                        "type": "artists",
+                        "id": 4,
+                        "slug": "aline-mwamba",
+                        "title": "Aline Mwamba",
+                        "image_url": "https://res.cloudinary.com/artdukivu/image/upload/v1/artists/photos/aline.jpg",
+                        "score": 8.2,
+                    },
+                    {
+                        "type": "articles",
+                        "id": 12,
+                        "slug": "scene-goma-2026",
+                        "title": "La scène musicale de Goma en 2026",
+                        "image_url": None,
+                        "score": 5.1,
+                    },
+                ],
+            },
+            response_only=True,
+        )
+    ],
 )
 class SearchView(APIView):
     permission_classes = [permissions.AllowAny]

@@ -1,6 +1,6 @@
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -24,6 +24,28 @@ from .serializers import (
 
 
 @extend_schema(tags=["Events"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouvel événement",
+                value={
+                    "title": "Festival Karl Gant",
+                    "description": "Le plus grand festival de musique du Kivu.",
+                    "image": "https://res.cloudinary.com/artdukivu/image/upload/v1721581234/events/covers/festival.jpg",
+                    "date": "2026-10-10T18:00:00Z",
+                    "venue_name": "Stade de l'Unité",
+                    "city": 1,
+                    "category": "festival",
+                    "status": "upcoming",
+                    "ticket_price": "10000",
+                    "max_capacity": 5000,
+                },
+                request_only=True,
+            )
+        ]
+    )
+)
 class EventViewSet(UploadThrottleMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination

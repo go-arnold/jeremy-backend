@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
-from apps.media_uploads.fields import CloudinaryUrlField
+from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 from apps.media_uploads.validation import verify_cloudinary_asset
 
 from .models import MusicRelease
@@ -28,7 +28,7 @@ class ReleaseListSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
 
 
 class ReleaseDetailSerializer(serializers.ModelSerializer):
@@ -57,7 +57,7 @@ class ReleaseDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
 
     # Single-object endpoint (retrieve/featured only) — safe to compute directly here, unlike
     # ReleaseListSerializer where this would be an N+1 across every item on the page.

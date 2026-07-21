@@ -1,5 +1,5 @@
 from django.db.models import Count, Q
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -8,6 +8,7 @@ from rest_framework.viewsets import ModelViewSet
 from apps.engagement.mixins import EngagementActionsMixin
 from core.pagination import StandardPagination
 from core.permissions import IsOwnerOrAdmin
+from core.schema_examples import MEDIA_ITEM_EXAMPLE
 from core.serializers import BulkDeleteSerializer
 from core.throttling import UploadThrottleMixin
 
@@ -27,6 +28,22 @@ from .serializers import (
 
 
 @extend_schema(tags=["Community"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouveau post",
+                value={
+                    "title": "Mon nouveau titre",
+                    "content": "Regardez ce que j'ai créé !",
+                    "media": MEDIA_ITEM_EXAMPLE,
+                    "post_type": "art",
+                },
+                request_only=True,
+            )
+        ]
+    )
+)
 class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
     pagination_class = StandardPagination
     http_method_names = ["get", "post", "delete"]
@@ -77,6 +94,19 @@ class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
         code = status.HTTP_201_CREATED if result["action"] == "liked" else status.HTTP_200_OK
         return Response(result, status=code)
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Soumission de talent",
+                value={
+                    "title": "Ma nouvelle chanson",
+                    "content": "Enregistrée ce week-end.",
+                    "media": MEDIA_ITEM_EXAMPLE,
+                },
+                request_only=True,
+            )
+        ]
+    )
     @action(detail=False, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def submit_talent(self, request):
         ser = TalentSubmissionSerializer(data=request.data)
@@ -101,6 +131,23 @@ class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
 
 
 @extend_schema(tags=["Community"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouveau défi",
+                value={
+                    "title": "Défi du mois : reprise acoustique",
+                    "description": "Proposez votre reprise acoustique préférée.",
+                    "cover": "https://res.cloudinary.com/artdukivu/image/upload/v1721581234/community/challenges/cover.jpg",
+                    "prize": "Mise en avant sur la page d'accueil",
+                    "deadline": "2026-09-01T00:00:00Z",
+                },
+                request_only=True,
+            )
+        ]
+    )
+)
 class ChallengeViewSet(UploadThrottleMixin, ModelViewSet):
     pagination_class = StandardPagination
     lookup_field = "slug"
@@ -163,6 +210,19 @@ class ChallengeViewSet(UploadThrottleMixin, ModelViewSet):
             )
         return Response({"detail": "Participation enregistrée."}, status=status.HTTP_201_CREATED)
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Réponse au défi",
+                value={
+                    "title": "Ma reprise acoustique",
+                    "content": "Voici ma participation !",
+                    "media": MEDIA_ITEM_EXAMPLE,
+                },
+                request_only=True,
+            )
+        ]
+    )
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def participate(self, request, slug=None):
         challenge = self.get_object()
@@ -176,6 +236,19 @@ class ChallengeViewSet(UploadThrottleMixin, ModelViewSet):
             )
         return Response(CommunityPostSerializer(result["post"]).data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Résultat épinglé",
+                value={
+                    "title": "Et le gagnant est...",
+                    "content": "Merci à tous les participants !",
+                    "media": MEDIA_ITEM_EXAMPLE,
+                },
+                request_only=True,
+            )
+        ]
+    )
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def publish_result(self, request, slug=None):
         challenge = self.get_object()
@@ -215,6 +288,19 @@ class PollViewSet(ModelViewSet):
     def perform_destroy(self, instance):
         services.delete_poll(instance)
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouveau sondage",
+                value={
+                    "question": "Quel est votre genre musical préféré ?",
+                    "options": [{"text": "Afrobeat"}, {"text": "Rumba"}, {"text": "Hip-hop"}],
+                    "expires_at": "2026-08-15T00:00:00Z",
+                },
+                request_only=True,
+            )
+        ]
+    )
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -231,6 +317,9 @@ class PollViewSet(ModelViewSet):
         count = services.bulk_delete_polls(ser.validated_data["ids"])
         return Response({"deleted": count})
 
+    @extend_schema(
+        examples=[OpenApiExample("Voter pour une option", value={"option_id": 3}, request_only=True)]
+    )
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def vote(self, request, pk=None):
         poll = self.get_object()

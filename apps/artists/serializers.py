@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
-from apps.media_uploads.fields import CloudinaryUrlField
+from apps.engagement.services import engagement_counts
+from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 
 from .models import Artist, ArtistPhoto, ArtistVideo, Genre, Release
 
@@ -29,7 +30,7 @@ class ReleaseSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
 
 
 class ArtistVideoSerializer(serializers.ModelSerializer):
@@ -40,7 +41,7 @@ class ArtistVideoSerializer(serializers.ModelSerializer):
         fields = ["id", "title", "thumbnail_url", "video_url", "duration", "view_count", "published_at"]
 
     def get_thumbnail_url(self, obj):
-        return obj.thumbnail.url if obj.thumbnail else None
+        return resolve_cloudinary_url(obj.thumbnail, "image")
 
 
 class ArtistPhotoSerializer(serializers.ModelSerializer):
@@ -51,7 +52,7 @@ class ArtistPhotoSerializer(serializers.ModelSerializer):
         fields = ["id", "image_url", "caption", "order"]
 
     def get_image_url(self, obj):
-        return obj.image.url if obj.image else None
+        return resolve_cloudinary_url(obj.image, "image")
 
 
 class ReleaseWriteSerializer(serializers.ModelSerializer):
@@ -108,7 +109,7 @@ class ArtistListSerializer(serializers.ModelSerializer):
         ]
 
     def get_photo_url(self, obj):
-        return obj.photo.url if obj.photo else None
+        return resolve_cloudinary_url(obj.photo, "image")
 
     def get_genre_names(self, obj):
         # Avoid N+1 by using prefetch_related in the viewset
@@ -122,6 +123,8 @@ class ArtistDetailSerializer(serializers.ModelSerializer):
     releases = ReleaseSerializer(many=True, read_only=True)
     videos = ArtistVideoSerializer(many=True, read_only=True)
     gallery = ArtistPhotoSerializer(many=True, read_only=True)
+    like_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Artist
@@ -139,6 +142,8 @@ class ArtistDetailSerializer(serializers.ModelSerializer):
             "social_links",
             "release_count",
             "video_count",
+            "like_count",
+            "comment_count",
             "releases",
             "videos",
             "gallery",
@@ -146,10 +151,24 @@ class ArtistDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_photo_url(self, obj):
-        return obj.photo.url if obj.photo else None
+        return resolve_cloudinary_url(obj.photo, "image")
 
     def get_cover_url(self, obj):
-        return obj.cover_image.url if obj.cover_image else None
+        return resolve_cloudinary_url(obj.cover_image, "image")
+
+    # Single-object endpoint (retrieve only) — same rationale as WebTV's VideoDetailSerializer:
+    # safe to compute directly here, cached per-request so both fields share one query.
+    def _counts(self, obj):
+        cache = self.context.setdefault("_engagement_counts_cache", {})
+        if obj.pk not in cache:
+            cache[obj.pk] = engagement_counts(obj)
+        return cache[obj.pk]
+
+    def get_like_count(self, obj):
+        return self._counts(obj)["like_count"]
+
+    def get_comment_count(self, obj):
+        return self._counts(obj)["comment_count"]
 
 
 class ArtistWriteSerializer(serializers.ModelSerializer):

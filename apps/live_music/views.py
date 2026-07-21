@@ -1,5 +1,5 @@
 from django.conf import settings
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -20,6 +20,21 @@ from .serializers import (
 
 
 @extend_schema(tags=["Live Music"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouvelle session live",
+                value={
+                    "title": "Session acoustique en direct",
+                    "cover": "https://res.cloudinary.com/artdukivu/image/upload/v1721581234/live_music/covers/session.jpg",
+                    "artists": [4, 9],
+                },
+                request_only=True,
+            )
+        ]
+    )
+)
 class MusicLiveSessionViewSet(EngagementActionsMixin, LiveChatViewSetMixin, ModelViewSet):
     queryset = MusicLiveSession.objects.prefetch_related("artists")
     permission_classes = [IsAdminOrReadOnly]
@@ -47,6 +62,21 @@ class MusicLiveSessionViewSet(EngagementActionsMixin, LiveChatViewSetMixin, Mode
             return Response({"detail": "Aucun son en direct actuellement."}, status=status.HTTP_404_NOT_FOUND)
         return Response(MusicLiveSessionSerializer(session).data)
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Diffusion démarrée",
+                value={
+                    "status": "live",
+                    "rtmp_server_url": "rtmp://art-du-kivu-api.kelor.tech:1935/live",
+                    "stream_key": "audio_3f9a1c2b7e4d5f60a1b2c3d4e5f60718",
+                    "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/audio_3f9a1c2b7e4d5f60a1b2c3d4e5f60718/index.m3u8",
+                },
+                response_only=True,
+                description="stream_key change à chaque appel — jamais réutilisé d'une diffusion à l'autre.",
+            )
+        ]
+    )
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def go_live(self, request, slug=None):
         session = services.start_live(self.get_object())
@@ -59,6 +89,9 @@ class MusicLiveSessionViewSet(EngagementActionsMixin, LiveChatViewSetMixin, Mode
             }
         )
 
+    @extend_schema(
+        examples=[OpenApiExample("Diffusion terminée", value={"status": "ended"}, response_only=True)]
+    )
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def end_live(self, request, slug=None):
         session = services.end_live(self.get_object())
@@ -66,6 +99,23 @@ class MusicLiveSessionViewSet(EngagementActionsMixin, LiveChatViewSetMixin, Mode
 
 
 @extend_schema(tags=["Live Music"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouveau créneau",
+                value={
+                    "title": "Créneau vendredi soir",
+                    "artist": 4,
+                    "day_of_week": 5,
+                    "start_time": "20:00:00",
+                    "end_time": "22:00:00",
+                },
+                request_only=True,
+            )
+        ]
+    )
+)
 class MusicLiveSlotViewSet(ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
 

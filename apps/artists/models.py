@@ -2,6 +2,8 @@ from cloudinary.models import CloudinaryField
 from django.db import models
 from django.utils.text import slugify
 
+from apps.engagement.models import Engageable
+
 
 class Genre(models.Model):
     name = models.CharField(max_length=50, unique=True)
@@ -19,7 +21,7 @@ class Genre(models.Model):
         super().save(*args, **kwargs)
 
 
-class Artist(models.Model):
+class Artist(Engageable):
     name = models.CharField(max_length=200, db_index=True)
     slug = models.SlugField(max_length=220, unique=True, db_index=True)
     bio = models.TextField(blank=True)

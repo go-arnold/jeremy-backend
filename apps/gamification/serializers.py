@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.media_uploads.fields import resolve_cloudinary_url
+
 from . import services
 from .models import Badge, ConsumptionLog, UserBadge
 
@@ -12,7 +14,7 @@ class BadgeSerializer(serializers.ModelSerializer):
         fields = ["id", "slug", "name", "description", "icon_url", "threshold_seconds", "order"]
 
     def get_icon_url(self, obj):
-        return obj.icon.url if obj.icon else None
+        return resolve_cloudinary_url(obj.icon, "image")
 
 
 class UserBadgeSerializer(serializers.ModelSerializer):

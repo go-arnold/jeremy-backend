@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
-from apps.media_uploads.fields import CloudinaryUrlField
+from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 
 from .models import Emission
 
@@ -24,7 +24,7 @@ class EmissionListSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
 
 
 class EmissionDetailSerializer(serializers.ModelSerializer):
@@ -55,7 +55,7 @@ class EmissionDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
 
     def get_host_names(self, obj):
         return [h.name for h in obj.hosts.all()]

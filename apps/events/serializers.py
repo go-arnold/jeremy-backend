@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.artists.serializers import ArtistListSerializer
-from apps.media_uploads.fields import CloudinaryUrlField
+from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 
 from .models import City, Event, EventScheduleItem
 
@@ -44,7 +44,7 @@ class EventListSerializer(serializers.ModelSerializer):
         ]
 
     def get_image_url(self, obj):
-        return obj.image.url if obj.image else None
+        return resolve_cloudinary_url(obj.image, "image")
 
     def get_registration_progress(self, obj):
         if obj.max_capacity:
@@ -86,7 +86,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_image_url(self, obj):
-        return obj.image.url if obj.image else None
+        return resolve_cloudinary_url(obj.image, "image")
 
     def get_registration_progress(self, obj):
         if obj.max_capacity:

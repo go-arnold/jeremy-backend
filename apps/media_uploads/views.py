@@ -1,5 +1,5 @@
-from drf_spectacular.utils import extend_schema
-from rest_framework import permissions, status
+from drf_spectacular.utils import OpenApiExample, extend_schema, inline_serializer
+from rest_framework import permissions, serializers, status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.response import Response
 
@@ -8,7 +8,38 @@ from core.throttling import UploadRateThrottle
 from . import services
 
 
-@extend_schema(tags=["Media"])
+@extend_schema(
+    tags=["Media"],
+    request=inline_serializer("UploadSignatureRequest", fields={"context": serializers.CharField()}),
+    responses=inline_serializer(
+        "UploadSignatureResponse",
+        fields={
+            "signature": serializers.CharField(),
+            "timestamp": serializers.IntegerField(),
+            "api_key": serializers.CharField(),
+            "cloud_name": serializers.CharField(),
+            "folder": serializers.CharField(),
+            "resource_type": serializers.CharField(),
+            "upload_url": serializers.CharField(),
+        },
+    ),
+    examples=[
+        OpenApiExample("Contexte", value={"context": "artist_gallery_photo"}, request_only=True),
+        OpenApiExample(
+            "Paramètres signés",
+            value={
+                "signature": "9c1f8e2a...",
+                "timestamp": 1721581234,
+                "api_key": "123456789012345",
+                "cloud_name": "artdukivu",
+                "folder": "artists/gallery",
+                "resource_type": "image",
+                "upload_url": "https://api.cloudinary.com/v1_1/artdukivu/image/upload",
+            },
+            response_only=True,
+        ),
+    ],
+)
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 @throttle_classes([UploadRateThrottle])

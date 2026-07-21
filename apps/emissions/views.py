@@ -1,5 +1,5 @@
 from django.conf import settings
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -23,6 +23,24 @@ from .serializers import (
 
 
 @extend_schema(tags=["Emissions"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouvelle émission",
+                value={
+                    "title": "Débat spécial élections",
+                    "description": "Un débat en direct avec des invités.",
+                    "cover": "https://res.cloudinary.com/artdukivu/image/upload/v1721581234/emissions/covers/debat.jpg",
+                    "scheduled_at": "2026-08-20T19:00:00Z",
+                    "duration_minutes": 90,
+                    "hosts": [4, 9],
+                },
+                request_only=True,
+            )
+        ]
+    )
+)
 class EmissionViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
@@ -64,6 +82,21 @@ class EmissionViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet)
             )
         return Response(EmissionDetailSerializer(emission).data)
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Diffusion démarrée",
+                value={
+                    "status": "live",
+                    "rtmp_server_url": "rtmp://art-du-kivu-api.kelor.tech:1935/live",
+                    "stream_key": "audio_3f9a1c2b7e4d5f60a1b2c3d4e5f60718",
+                    "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/audio_3f9a1c2b7e4d5f60a1b2c3d4e5f60718/index.m3u8",
+                },
+                response_only=True,
+                description="stream_key change à chaque appel — jamais réutilisé d'une diffusion à l'autre.",
+            )
+        ]
+    )
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def go_live(self, request, slug=None):
         emission = services.start_live(self.get_object())
@@ -76,6 +109,9 @@ class EmissionViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet)
             }
         )
 
+    @extend_schema(
+        examples=[OpenApiExample("Diffusion terminée", value={"status": "recorded"}, response_only=True)]
+    )
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def end_live(self, request, slug=None):
         emission = services.end_live(self.get_object())

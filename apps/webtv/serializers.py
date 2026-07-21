@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
-from apps.media_uploads.fields import CloudinaryUrlField
+from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 from apps.media_uploads.validation import verify_cloudinary_asset
 
 from .models import WebTVVideo
@@ -22,6 +22,7 @@ class VideoListSerializer(serializers.ModelSerializer):
             "category",
             "is_premier",
             "is_live",
+            "broadcast_mode",
             "location",
             "artist_names",
             "view_count",
@@ -29,7 +30,7 @@ class VideoListSerializer(serializers.ModelSerializer):
         ]
 
     def get_thumbnail_url(self, obj):
-        return obj.thumbnail.url if obj.thumbnail else None
+        return resolve_cloudinary_url(obj.thumbnail, "image")
 
     def get_artist_names(self, obj):
         return [a.name for a in obj.artists.all()]
@@ -55,6 +56,7 @@ class VideoDetailSerializer(serializers.ModelSerializer):
             "category",
             "is_premier",
             "is_live",
+            "broadcast_mode",
             "location",
             "artist_names",
             "view_count",
@@ -64,7 +66,7 @@ class VideoDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_thumbnail_url(self, obj):
-        return obj.thumbnail.url if obj.thumbnail else None
+        return resolve_cloudinary_url(obj.thumbnail, "image")
 
     def get_artist_names(self, obj):
         return [a.name for a in obj.artists.all()]
@@ -88,6 +90,7 @@ class VideoDetailSerializer(serializers.ModelSerializer):
 
 class VideoWriteSerializer(serializers.ModelSerializer):
     thumbnail = CloudinaryUrlField(resource_type="image", required=False, allow_blank=True)
+    video_url = serializers.URLField(max_length=500, required=False, allow_blank=True)
 
     class Meta:
         model = WebTVVideo
@@ -101,14 +104,26 @@ class VideoWriteSerializer(serializers.ModelSerializer):
             "category",
             "is_premier",
             "is_live",
+            "broadcast_mode",
             "location",
             "artists",
             "published_at",
         ]
         extra_kwargs = {"slug": {"required": False}}
 
+    def validate(self, attrs):
+        # A "camera" broadcast has no file of its own (the live feed itself is what plays, via
+        # playback_hls_url) — only "playout" (a pre-recorded file/URL) requires video_url.
+        mode = attrs.get("broadcast_mode", getattr(self.instance, "broadcast_mode", WebTVVideo.MODE_PLAYOUT))
+        if mode == WebTVVideo.MODE_PLAYOUT and not attrs.get(
+            "video_url", getattr(self.instance, "video_url", "")
+        ):
+            raise serializers.ValidationError({"video_url": "Requis pour une vidéo en mode playout."})
+        return attrs
+
     def validate_video_url(self, value):
-        verify_cloudinary_asset(value, "video")
+        if value:
+            verify_cloudinary_asset(value, "video")
         return value
 
 
@@ -116,16 +131,18 @@ class VideoBulkUpdateItemSerializer(serializers.Serializer):
     id = serializers.IntegerField(min_value=1)
     title = serializers.CharField(max_length=300, required=False)
     description = serializers.CharField(required=False, allow_blank=True)
-    video_url = serializers.URLField(required=False)
+    video_url = serializers.URLField(max_length=500, required=False, allow_blank=True)
     duration = serializers.CharField(max_length=10, required=False, allow_blank=True)
     category = serializers.ChoiceField(choices=WebTVVideo.CATEGORY_CHOICES, required=False)
     is_premier = serializers.BooleanField(required=False)
     is_live = serializers.BooleanField(required=False)
+    broadcast_mode = serializers.ChoiceField(choices=WebTVVideo.BROADCAST_MODE_CHOICES, required=False)
     location = serializers.CharField(max_length=100, required=False, allow_blank=True)
     published_at = serializers.DateTimeField(required=False)
 
     def validate_video_url(self, value):
-        verify_cloudinary_asset(value, "video")
+        if value:
+            verify_cloudinary_asset(value, "video")
         return value
 
 

@@ -1,7 +1,7 @@
 from django.db.models import Q
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -30,6 +30,27 @@ from .tasks import async_increment_play
 
 
 @extend_schema(tags=["Podcasts"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Podcast autonome (sans épisode)",
+                value={
+                    "title": "Débat du vendredi",
+                    "description": "Un podcast unique, pas encore une série.",
+                    "audio_file": "https://res.cloudinary.com/artdukivu/video/upload/v1721581234/podcasts/audio/debat.mp3",
+                    "category": "talk",
+                },
+                request_only=True,
+            ),
+        ]
+    ),
+    partial_update=extend_schema(
+        examples=[
+            OpenApiExample("Mettre à jour la catégorie", value={"category": "culture"}, request_only=True),
+        ]
+    ),
+)
 class PodcastSeriesViewSet(UploadThrottleMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
@@ -61,6 +82,15 @@ class PodcastSeriesViewSet(UploadThrottleMixin, ModelViewSet):
     def perform_destroy(self, instance):
         services.delete_series(instance)
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Catégories disponibles",
+                value=[{"id": "talk", "label": "Talk"}, {"id": "culture", "label": "Culture"}],
+                response_only=True,
+            )
+        ]
+    )
     @method_decorator(cache_page(60 * 15))
     @action(detail=False, methods=["get"])
     def categories(self, request):
@@ -100,6 +130,38 @@ class PodcastSeriesViewSet(UploadThrottleMixin, ModelViewSet):
 
 
 @extend_schema(tags=["Podcasts"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Épisode avec invités mixtes (artiste + libre)",
+                value={
+                    "series": 4,
+                    "title": "Épisode 12 — La scène urbaine à Goma",
+                    "description": "Discussion avec des artistes locaux.",
+                    "audio_file": "https://res.cloudinary.com/artdukivu/video/upload/v1721581234/podcasts/audio/ep12.mp3",
+                    "episode_number": 12,
+                    "season_number": 1,
+                    "guests": [
+                        {"name": "Aline Mwamba", "artist_id": 12},
+                        {"name": "Invité surprise"},
+                    ],
+                    "published_at": "2026-08-01T18:00:00Z",
+                },
+                request_only=True,
+            ),
+        ]
+    ),
+    partial_update=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Mettre à jour les invités",
+                value={"guests": [{"name": "Nouvel invité", "artist_id": None, "user_id": 8}]},
+                request_only=True,
+            ),
+        ]
+    ),
+)
 class PodcastEpisodeViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination

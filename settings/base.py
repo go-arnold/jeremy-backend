@@ -279,6 +279,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.streaming.tasks.sync_live_status",
         "schedule": 15,
     },
+    # Flips draft articles with a past-due `scheduled_at` to published — the task itself
+    # (apps.articles.tasks.publish_scheduled_articles) already existed but was never wired into
+    # the beat schedule, so "scheduled" articles never actually got published automatically
+    # (BACKEND-GAPS-COMPLET.md's "pas de vrai état programmé" note).
+    "publish-scheduled-articles": {
+        "task": "apps.articles.tasks.publish_scheduled_articles",
+        "schedule": 300,
+    },
 }
 
 # ── DRF ───────────────────────────────────────────────────────────────────────

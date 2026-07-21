@@ -1,4 +1,4 @@
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -22,6 +22,25 @@ from .serializers import (
 
 
 @extend_schema(tags=["Releases"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouvelle sortie musicale",
+                value={
+                    "artist": 4,
+                    "title": "Kivu Nights (Single)",
+                    "cover": "https://res.cloudinary.com/artdukivu/image/upload/v1721581234/releases/covers/kivu-nights.jpg",
+                    "release_date": "2026-09-15",
+                    "format": "single",
+                    "is_featured": True,
+                    "streaming_links": {"spotify": "https://open.spotify.com/track/xyz"},
+                },
+                request_only=True,
+            )
+        ]
+    )
+)
 class ReleaseViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination

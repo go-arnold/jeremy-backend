@@ -28,6 +28,18 @@ def update_user_profile(user: User, validated_data: dict) -> User:
 
 
 @transaction.atomic
+def create_user_admin(validated_data: dict) -> User:
+    password = validated_data.pop("password")
+    # Admin-created accounts skip the self-signup email-verification flow entirely, so default
+    # to already-verified unless the admin explicitly says otherwise.
+    validated_data.setdefault("is_verified", True)
+    user = User(**validated_data)
+    user.set_password(password)
+    user.save()
+    return user
+
+
+@transaction.atomic
 def bulk_update_users(items: list) -> int:
     ids = [d["id"] for d in items]
     obj_map = {o.pk: o for o in User.objects.filter(pk__in=ids)}

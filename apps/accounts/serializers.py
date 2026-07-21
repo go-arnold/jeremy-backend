@@ -1,25 +1,12 @@
-from cloudinary.utils import cloudinary_url
 from dj_rest_auth.registration.serializers import RegisterSerializer as BaseRegisterSerializer
 from dj_rest_auth.serializers import UserDetailsSerializer
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from apps.media_uploads.fields import CloudinaryUrlField
+from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 from apps.realtime.presence import is_user_online
 
 from .models import ListenHistory, User
-
-
-def _resolve_cloudinary_url(field_value):
-    if not field_value:
-        return None
-    if hasattr(field_value, "url"):
-        return field_value.url
-    # Same-request PATCH: CloudinaryField only becomes a `CloudinaryResource` (with `.url`)
-    # once reloaded from the DB — right after a save, this is still the plain public_id string
-    # `CloudinaryUrlField` normalized the input down to, so the URL has to be built from it
-    # directly instead of returning that bare public_id (which isn't a valid URL at all).
-    url, _options = cloudinary_url(field_value, resource_type="image", secure=True)
-    return url
 
 
 class RegisterSerializer(BaseRegisterSerializer):
@@ -71,10 +58,10 @@ class UserSerializer(UserDetailsSerializer):
         read_only_fields = ["id", "email", "role", "is_verified", "listen_count", "created_at"]
 
     def get_cover_image_url(self, obj):
-        return _resolve_cloudinary_url(obj.cover_image)
+        return resolve_cloudinary_url(obj.cover_image, "image")
 
     def get_avatar_url(self, obj):
-        return _resolve_cloudinary_url(obj.avatar)
+        return resolve_cloudinary_url(obj.avatar, "image")
 
     def get_is_online(self, obj):
         """Computed live from WebSocket presence (apps.realtime.presence), not stored — true as
@@ -105,10 +92,31 @@ class UserAdminSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "listen_count", "created_at"]
 
     def get_avatar_url(self, obj):
-        return obj.avatar.url if obj.avatar else None
+        return resolve_cloudinary_url(obj.avatar, "image")
 
     def get_is_online(self, obj):
         return is_user_online(obj.id)
+
+
+class UserAdminCreateSerializer(serializers.ModelSerializer):
+    # write-only, deliberately separate from UserAdminSerializer (read shape) — admin creation
+    # skips the self-signup email-verification flow entirely (RegisterSerializer/dj-rest-auth is
+    # for that), an admin sets role/is_active directly instead.
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    class Meta:
+        model = User
+        fields = ["email", "username", "password", "handle", "bio", "role", "is_active", "is_verified"]
+        extra_kwargs = {
+            "is_active": {"required": False},
+            "is_verified": {"required": False},
+            "handle": {"required": False},
+            "bio": {"required": False},
+        }
+
+    def validate_password(self, value):
+        validate_password(value)
+        return value
 
 
 class ListenHistorySerializer(serializers.ModelSerializer):

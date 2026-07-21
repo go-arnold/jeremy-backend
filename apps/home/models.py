@@ -9,7 +9,7 @@ class HomeBanner(models.Model):
     title = models.CharField(max_length=200, blank=True)
     subtitle = models.CharField(max_length=300, blank=True)
     cta_label = models.CharField(max_length=100, blank=True)
-    cta_url = models.URLField(blank=True)
+    cta_url = models.URLField(max_length=500, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

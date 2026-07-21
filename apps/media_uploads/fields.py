@@ -3,6 +3,30 @@ from rest_framework import serializers
 from .validation import _extract_public_id, verify_cloudinary_asset
 
 
+def resolve_cloudinary_url(field_value, resource_type="image"):
+    """Returns a real, loadable URL for a `CloudinaryField`'s current value, regardless of
+    whether it's already a `CloudinaryResource` (the case whenever the instance was freshly
+    loaded from the DB — the normal case for every GET) or still a bare string (the in-memory
+    state of an instance that was just created/updated and returned directly in the same
+    request/response, before ever being reloaded — `CloudinaryField`'s descriptor only wraps a
+    value as a `CloudinaryResource` with a working `.url` on load from the database).
+
+    Every `get_xxx_url(self, obj): return obj.field.url if obj.field else None` pattern in this
+    codebase needs this instead of a bare `.url` access, or it 500s on precisely the requests
+    where a Cloudinary-backed field was just set in the very same request that reads it back —
+    e.g. `POST /artists/{slug}/gallery/` (write + immediate serialize of the same instance,
+    never reloaded) 500ing on any successful upload.
+    """
+    if not field_value:
+        return None
+    if hasattr(field_value, "url"):
+        return field_value.url
+    from cloudinary.utils import cloudinary_url
+
+    url, _options = cloudinary_url(str(field_value), resource_type=resource_type, secure=True)
+    return url
+
+
 class CloudinaryUrlField(serializers.CharField):
     """Bridges a model `CloudinaryField` to the API for writing.
 
@@ -41,8 +65,16 @@ class CloudinaryUrlField(serializers.CharField):
         normalized = "https://" + value.split("://", 1)[1] if value.lower().startswith("http://") else value
 
         verify_cloudinary_asset(normalized, self.resource_type)  # raises ValidationError if invalid
-        public_id, _resource_type = _extract_public_id(normalized)
+        parsed = _extract_public_id(normalized)
+        if parsed is None:
+            # Verified but not one of our own Cloudinary assets (an externally-hosted URL that
+            # passed verify_cloudinary_asset's external-host check, e.g. a trusted embed host or
+            # any other public URL) — nothing to reduce to a public_id, store the URL as-is.
+            # Without this branch, ANY non-own-account URL crashed here with an unhandled
+            # TypeError (unpacking None) the moment validation succeeded for it.
+            return normalized
+        public_id, _resource_type = parsed
         return public_id
 
     def to_representation(self, value):
-        return value.url if value else None
+        return resolve_cloudinary_url(value, self.resource_type)

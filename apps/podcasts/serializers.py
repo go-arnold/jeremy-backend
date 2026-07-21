@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from apps.artists.models import Artist
 from apps.engagement.services import engagement_counts
-from apps.media_uploads.fields import CloudinaryUrlField
+from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 from apps.media_uploads.validation import verify_cloudinary_asset
 
 from .models import PodcastEpisode, PodcastSeries
@@ -78,16 +78,21 @@ class PodcastSeriesListSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
 
     def get_audio_url(self, obj):
-        if obj.audio_file:
-            return obj.audio_file.url
-        return obj.audio_url or None
+        # audio_file's actual Cloudinary asset lives under resource_type "video" (Cloudinary's
+        # own convention for audio — see media_uploads.services UPLOAD_CONTEXTS["podcast_audio"]),
+        # not the CloudinaryField's own declared "raw" (admin-upload-widget metadata only).
+        resolved = resolve_cloudinary_url(obj.audio_file, "video")
+        return resolved or (obj.audio_url or None)
 
 
 class EpisodeListSerializer(serializers.ModelSerializer):
     cover_url = serializers.SerializerMethodField()
+    # Avoids an extra per-episode GET /podcasts/episodes/{slug}/ just to get a playable URL
+    # (BACKEND-GAPS-COMPLET.md's "la liste ne renvoie pas audio_url" N+1 note).
+    audio_url = serializers.SerializerMethodField()
     series_title = serializers.CharField(source="series.title", read_only=True)
     series_slug = serializers.CharField(source="series.slug", read_only=True)
     guests = GuestSerializer(many=True, read_only=True)
@@ -100,6 +105,7 @@ class EpisodeListSerializer(serializers.ModelSerializer):
             "slug",
             "description",
             "cover_url",
+            "audio_url",
             "duration",
             "episode_number",
             "season_number",
@@ -112,7 +118,14 @@ class EpisodeListSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
+
+    def get_audio_url(self, obj):
+        # audio_file's actual Cloudinary asset lives under resource_type "video" (Cloudinary's
+        # own convention for audio — see media_uploads.services UPLOAD_CONTEXTS["podcast_audio"]),
+        # not the CloudinaryField's own declared "raw" (admin-upload-widget metadata only).
+        resolved = resolve_cloudinary_url(obj.audio_file, "video")
+        return resolved or (obj.audio_url or None)
 
 
 class EpisodeDetailSerializer(serializers.ModelSerializer):
@@ -146,7 +159,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
 
     # Single-object endpoint (retrieve only) — see WebTV's VideoDetailSerializer for the same
     # pattern/rationale (cached per-request so both fields share one engagement_counts() call).
@@ -163,9 +176,11 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
         return self._counts(obj)["comment_count"]
 
     def get_audio_url(self, obj):
-        if obj.audio_file:
-            return obj.audio_file.url
-        return obj.audio_url or None
+        # audio_file's actual Cloudinary asset lives under resource_type "video" (Cloudinary's
+        # own convention for audio — see media_uploads.services UPLOAD_CONTEXTS["podcast_audio"]),
+        # not the CloudinaryField's own declared "raw" (admin-upload-widget metadata only).
+        resolved = resolve_cloudinary_url(obj.audio_file, "video")
+        return resolved or (obj.audio_url or None)
 
 
 class EpisodeWriteSerializer(serializers.ModelSerializer):

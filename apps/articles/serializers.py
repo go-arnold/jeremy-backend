@@ -1,7 +1,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from apps.media_uploads.fields import CloudinaryUrlField
+from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 
 from .models import Article, Category, Comment, Tag
 
@@ -53,7 +53,7 @@ class ArticleListSerializer(serializers.ModelSerializer):
         ]
 
     def get_featured_image_url(self, obj):
-        return obj.featured_image.url if obj.featured_image else None
+        return resolve_cloudinary_url(obj.featured_image, "image")
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -101,7 +101,7 @@ class ArticleDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_featured_image_url(self, obj):
-        return obj.featured_image.url if obj.featured_image else None
+        return resolve_cloudinary_url(obj.featured_image, "image")
 
 
 class CategoryField(serializers.PrimaryKeyRelatedField):

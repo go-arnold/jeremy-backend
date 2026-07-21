@@ -1,5 +1,5 @@
 from django.conf import settings
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,6 +9,7 @@ from apps.engagement.mixins import EngagementActionsMixin
 from apps.realtime.mixins import LiveChatViewSetMixin
 from core.pagination import StandardPagination
 from core.permissions import IsAdminOrReadOnly
+from core.schema_examples import end_live_response_example, live_stream_response_example
 from core.serializers import BulkDeleteSerializer
 from core.throttling import UploadThrottleMixin
 
@@ -25,6 +26,37 @@ from .tasks import async_increment_view
 
 
 @extend_schema(tags=["Web TV"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Vidéo playout (fichier existant)",
+                value={
+                    "title": "Freestyle #12 — Studio Goma",
+                    "description": "Session freestyle enregistrée en studio.",
+                    "thumbnail": "https://res.cloudinary.com/artdukivu/image/upload/v1721581234/webtv/thumbnails/fs12.jpg",
+                    "video_url": "https://res.cloudinary.com/artdukivu/video/upload/v1721581234/webtv/videos/fs12.mp4",
+                    "category": "freestyles",
+                    "broadcast_mode": "playout",
+                    "artists": [4],
+                    "published_at": "2026-08-05T12:00:00Z",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Vidéo caméra (direct, sans fichier)",
+                value={
+                    "title": "Concert en direct — Place de l'Indépendance",
+                    "category": "concerts",
+                    "broadcast_mode": "camera",
+                    "published_at": "2026-08-05T20:00:00Z",
+                },
+                request_only=True,
+                description="video_url n'est pas requis en mode caméra — la diffusion se fait via playback_hls_url après go_live.",
+            ),
+        ]
+    )
+)
 class WebTVVideoViewSet(UploadThrottleMixin, EngagementActionsMixin, LiveChatViewSetMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
@@ -80,6 +112,7 @@ class WebTVVideoViewSet(UploadThrottleMixin, EngagementActionsMixin, LiveChatVie
             )
         return Response(VideoDetailSerializer(video).data)
 
+    @extend_schema(examples=[live_stream_response_example("video")])
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def go_live(self, request, slug=None):
         video = services.start_live(self.get_object())
@@ -92,6 +125,7 @@ class WebTVVideoViewSet(UploadThrottleMixin, EngagementActionsMixin, LiveChatVie
             }
         )
 
+    @extend_schema(examples=[end_live_response_example()])
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAdminUser])
     def end_live(self, request, slug=None):
         video = services.end_live(self.get_object())

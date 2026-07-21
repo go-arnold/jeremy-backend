@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
-from apps.media_uploads.fields import CloudinaryUrlField
+from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 from apps.realtime import presence
 
 from .models import MusicLiveSession, MusicLiveSlot
@@ -39,7 +39,7 @@ class MusicLiveSessionSerializer(serializers.ModelSerializer):
         return presence.count("live_music", str(obj.pk))
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
 
     # There is no separate list/detail split for this serializer, and current real usage
     # (`/live_music/sessions/current/`) only ever fetches a single object — safe to compute
@@ -80,7 +80,7 @@ class MusicLiveSlotSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
 
 
 class MusicLiveSlotWriteSerializer(serializers.ModelSerializer):

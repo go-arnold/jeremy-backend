@@ -3,8 +3,8 @@ from dj_rest_auth.views import LoginView, LogoutView, PasswordResetConfirmView, 
 from django.conf import settings
 from django.shortcuts import redirect
 from django.views import View
-from drf_spectacular.utils import extend_schema
-from rest_framework import generics, mixins, permissions, status
+from drf_spectacular.utils import OpenApiExample, extend_schema, inline_serializer
+from rest_framework import generics, mixins, permissions, serializers, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
@@ -27,6 +27,7 @@ from .serializers import (
     FavoriteToggleSerializer,
     ListenHistorySerializer,
     SavedItemSerializer,
+    UserAdminCreateSerializer,
     UserAdminSerializer,
     UserBulkUpdateSerializer,
     UserSerializer,
@@ -52,7 +53,19 @@ class TaggedLoginView(LoginView):
     pass
 
 
-@extend_schema(tags=["Auth"])
+_LOGOUT_RESPONSE = inline_serializer("LogoutResponse", fields={"detail": serializers.CharField()})
+
+
+@extend_schema(tags=["Auth"], methods=["GET"], responses=_LOGOUT_RESPONSE)
+@extend_schema(
+    tags=["Auth"],
+    methods=["POST"],
+    request=None,
+    responses=_LOGOUT_RESPONSE,
+    examples=[
+        OpenApiExample("Déconnexion réussie", value={"detail": "Déconnexion réussie."}, response_only=True)
+    ],
+)
 class TaggedLogoutView(LogoutView):
     pass
 
@@ -148,7 +161,7 @@ class UserViewSet(UploadThrottleMixin, GenericViewSet, mixins.ListModelMixin, mi
         # (SimpleRouter forwards each action's own kwargs into as_view()).
         # These routes are wired via manual `path()` in user_urls.py, which
         # bypasses that mechanism entirely, so it must be enforced here.
-        if self.action in ("list", "bulk_update", "bulk_delete"):
+        if self.action in ("list", "create", "destroy", "bulk_update", "bulk_delete"):
             return [permissions.IsAdminUser()]
         if self.action in ("retrieve", "update", "partial_update", "saved", "activity"):
             return [IsSelfOrAdmin()]
@@ -177,7 +190,10 @@ class UserViewSet(UploadThrottleMixin, GenericViewSet, mixins.ListModelMixin, mi
 
     @extend_schema(methods=["GET"], responses=ArtistListSerializer(many=True))
     @extend_schema(
-        methods=["POST"], request=FavoriteToggleSerializer, responses=FavoriteActionResponseSerializer
+        methods=["POST"],
+        request=FavoriteToggleSerializer,
+        responses=FavoriteActionResponseSerializer,
+        examples=[OpenApiExample("Ajouter/retirer un favori", value={"artist_id": 12}, request_only=True)],
     )
     @action(detail=True, methods=["get", "post"], url_path="favorites")
     def favorites(self, request, id=None):
@@ -214,6 +230,38 @@ class UserViewSet(UploadThrottleMixin, GenericViewSet, mixins.ListModelMixin, mi
         (falls back to their most recent activity if they haven't been active in 24h)."""
         user = self.get_object()
         return Response(ActivityEntrySerializer(profile_services.get_activity_feed(user), many=True).data)
+
+    @extend_schema(
+        request=UserAdminCreateSerializer,
+        responses=UserAdminSerializer,
+        examples=[
+            OpenApiExample(
+                "Créer un utilisateur (admin)",
+                value={
+                    "email": "nouveau@artdukivu.com",
+                    "username": "nouveau_membre",
+                    "password": "UnMotDePasseSolide123",
+                    "role": "editor",
+                },
+                request_only=True,
+            )
+        ],
+    )
+    def create(self, request, *args, **kwargs):
+        ser = UserAdminCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        user = services.create_user_admin(dict(ser.validated_data))
+        return Response(UserAdminSerializer(user).data, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request, *args, **kwargs):
+        user = self.get_object()
+        if user.pk == request.user.pk:
+            return Response(
+                {"detail": "Vous ne pouvez pas supprimer votre propre compte."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(request=UserBulkUpdateSerializer, responses=BulkUpdateResultSerializer)
     @action(detail=False, methods=["post"])

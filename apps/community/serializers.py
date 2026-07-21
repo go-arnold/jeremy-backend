@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.engagement.services import engagement_counts
-from apps.media_uploads.fields import CloudinaryUrlField
+from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 from apps.media_uploads.validation import validate_media_items
 
 from .models import Challenge, ChallengeParticipant, CommunityPost, Poll, PollOption
@@ -48,9 +48,11 @@ class CommunityPostSerializer(serializers.ModelSerializer):
 
 
 class CommunityPostWriteSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(max_length=200, required=False, allow_blank=True)
+
     class Meta:
         model = CommunityPost
-        fields = ["content", "media", "post_type"]
+        fields = ["title", "content", "media", "post_type"]
 
     def validate_media(self, value):
         if len(value) > 10:
@@ -98,7 +100,7 @@ class ChallengeSerializer(serializers.ModelSerializer):
         ]
 
     def get_cover_url(self, obj):
-        return obj.cover.url if obj.cover else None
+        return resolve_cloudinary_url(obj.cover, "image")
 
     def get_has_participated(self, obj):
         request = self.context.get("request")

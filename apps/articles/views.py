@@ -1,6 +1,6 @@
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
 from rest_framework import permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -27,6 +27,39 @@ from .tasks import async_increment_view
 
 
 @extend_schema(tags=["Articles"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Article avec catégorie par slug",
+                value={
+                    "title": "La scène musicale de Goma en 2026",
+                    "excerpt": "Un tour d'horizon des artistes montants.",
+                    "content": "<p>Contenu complet de l'article...</p>",
+                    "featured_image": "https://res.cloudinary.com/artdukivu/image/upload/v1721581234/articles/covers/goma.jpg",
+                    "category": "arts-visuels",
+                    "article_type": "blog",
+                    "status": "draft",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Article programmé (sans catégorie)",
+                value={
+                    "title": "Édition spéciale",
+                    "content": "<p>...</p>",
+                    "status": "draft",
+                    "scheduled_at": "2026-08-15T08:00:00Z",
+                },
+                request_only=True,
+                summary="Reste en draft jusqu'à ce que scheduled_at soit passé (publication auto).",
+            ),
+        ]
+    ),
+    partial_update=extend_schema(
+        examples=[OpenApiExample("Changer de catégorie", value={"category": "musique"}, request_only=True)]
+    ),
+)
 class ArticleViewSet(UploadThrottleMixin, ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = StandardPagination
@@ -109,6 +142,18 @@ class ArticleViewSet(UploadThrottleMixin, ModelViewSet):
         result = services.toggle_like(article, request.user)
         return Response(result)
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouveau commentaire", value={"content": "Excellent article !"}, request_only=True
+            ),
+            OpenApiExample(
+                "Réponse à un commentaire",
+                value={"content": "Je suis d'accord.", "parent_id": 42},
+                request_only=True,
+            ),
+        ]
+    )
     @action(detail=True, methods=["get", "post"], permission_classes=[permissions.IsAuthenticatedOrReadOnly])
     def comments(self, request, slug=None):
         article = self.get_object()

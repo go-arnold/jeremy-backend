@@ -1,4 +1,4 @@
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiExample, extend_schema, inline_serializer
 from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.generics import get_object_or_404
@@ -17,7 +17,7 @@ from .serializers import (
 )
 
 
-@extend_schema(tags=["Gamification"])
+@extend_schema(tags=["Gamification"], responses=BadgeSerializer(many=True))
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
 def badge_catalog(request):
@@ -25,7 +25,7 @@ def badge_catalog(request):
     return Response(BadgeSerializer(badges, many=True).data)
 
 
-@extend_schema(tags=["Gamification"])
+@extend_schema(tags=["Gamification"], responses=UserBadgeSerializer(many=True))
 @api_view(["GET"])
 @permission_classes([permissions.AllowAny])
 def user_badges(request, user_id):
@@ -35,7 +35,20 @@ def user_badges(request, user_id):
     return Response(UserBadgeSerializer(earned, many=True).data)
 
 
-@extend_schema(tags=["Gamification"])
+@extend_schema(
+    tags=["Gamification"],
+    request=ConsumptionRecordSerializer,
+    responses=inline_serializer(
+        name="ConsumptionResponse", fields={"newly_earned_badges": BadgeSerializer(many=True)}
+    ),
+    examples=[
+        OpenApiExample(
+            "Progression d'écoute",
+            value={"content_type": "podcast", "object_id": 42, "seconds": 30},
+            request_only=True,
+        )
+    ],
+)
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 @throttle_classes([ConsumptionRateThrottle])
@@ -52,7 +65,7 @@ def record_consumption(request):
     )
 
 
-@extend_schema(tags=["Gamification"])
+@extend_schema(tags=["Gamification"], responses=MediaRankingItemSerializer(many=True))
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def my_media_ranking(request):

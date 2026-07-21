@@ -1,5 +1,5 @@
-from drf_spectacular.utils import extend_schema
-from rest_framework import permissions, status
+from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view, inline_serializer
+from rest_framework import permissions, serializers, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -18,8 +18,17 @@ from .serializers import (
     SubscribeSerializer,
 )
 
+_DETAIL_RESPONSE = inline_serializer("DetailResponse", fields={"detail": serializers.CharField()})
 
-@extend_schema(tags=["Newsletter"])
+
+@extend_schema(
+    tags=["Newsletter"],
+    request=SubscribeSerializer,
+    responses=_DETAIL_RESPONSE,
+    examples=[
+        OpenApiExample("Nouvelle inscription", value={"email": "lecteur@example.com"}, request_only=True)
+    ],
+)
 class SubscribeView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_classes = [AuthRateThrottle]
@@ -31,7 +40,7 @@ class SubscribeView(APIView):
         return Response({"detail": "Vérifiez votre boîte mail pour confirmer votre abonnement."})
 
 
-@extend_schema(tags=["Newsletter"])
+@extend_schema(tags=["Newsletter"], responses=_DETAIL_RESPONSE)
 class ConfirmSubscriptionView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -45,7 +54,7 @@ class ConfirmSubscriptionView(APIView):
         return Response({"detail": "Abonnement confirmé avec succès."})
 
 
-@extend_schema(tags=["Newsletter"])
+@extend_schema(tags=["Newsletter"], responses=_DETAIL_RESPONSE)
 class UnsubscribeView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -60,6 +69,20 @@ class UnsubscribeView(APIView):
 
 
 @extend_schema(tags=["Newsletter"])
+@extend_schema_view(
+    create=extend_schema(
+        examples=[
+            OpenApiExample(
+                "Nouvelle newsletter",
+                value={
+                    "subject": "Nouveautés du mois",
+                    "body_html": "<p>Voici les sorties de ce mois-ci...</p>",
+                },
+                request_only=True,
+            )
+        ]
+    )
+)
 class NewsletterViewSet(ModelViewSet):
     queryset = Newsletter.objects.select_related("created_by").all()
     permission_classes = [permissions.IsAdminUser]
