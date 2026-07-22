@@ -57,7 +57,10 @@ def end_live(emission: Emission) -> Emission:
 
     from apps.streaming.tasks import finalize_live_recording
 
-    finalize_live_recording.delay("emissions", "Emission", emission.pk, stream_key, url_field="audio_url")
+    # Emission's model field for this is named video_url, not audio_url (added earlier than
+    # Radio/Live Music's own audio_url fields, before that naming convention existed) — the
+    # default url_field="video_url" on finalize_live_recording is correct here, not a bug.
+    finalize_live_recording.delay("emissions", "Emission", emission.pk, stream_key)
 
     return emission
 
