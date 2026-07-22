@@ -40,6 +40,9 @@ def delete_session(session: MusicLiveSession) -> None:
 
 @transaction.atomic
 def start_live(session: MusicLiveSession) -> MusicLiveSession:
+    if session.status == MusicLiveSession.STATUS_LIVE:
+        return session  # duplicate go_live call — already live, nothing to do
+
     fields = streaming_services.start_live_input(session.title, media_type="audio")
     for attr, value in fields.items():
         setattr(session, attr, value)
@@ -51,6 +54,12 @@ def start_live(session: MusicLiveSession) -> MusicLiveSession:
 
 @transaction.atomic
 def end_live(session: MusicLiveSession) -> MusicLiveSession:
+    if session.status != MusicLiveSession.STATUS_LIVE:
+        # Confirmed live (Web TV): a duplicate/late end_live call re-reading stream_key AFTER a
+        # prior call already cleared it enqueues a doomed finalize_live_recording("") and
+        # overwrites a possibly-already-successful recording_status back to "pending".
+        return session
+
     stream_key = session.stream_key
     streaming_services.stop_live_input(stream_key)
     session.status = MusicLiveSession.STATUS_ENDED

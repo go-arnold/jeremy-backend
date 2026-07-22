@@ -22,6 +22,11 @@ def get_premiers(limit: int = 5) -> list:
 
 @transaction.atomic
 def start_live(video: WebTVVideo) -> WebTVVideo:
+    if video.is_live:
+        # A duplicate go_live call would otherwise regenerate stream_key and, for playout mode,
+        # enqueue a second run_playout_stream fighting the first for the same RTMP path.
+        return video
+
     fields = streaming_services.start_live_input(video.title, media_type="video")
     for attr, value in fields.items():
         setattr(video, attr, value)
@@ -43,6 +48,13 @@ def start_live(video: WebTVVideo) -> WebTVVideo:
 
 @transaction.atomic
 def end_live(video: WebTVVideo) -> WebTVVideo:
+    if not video.is_live:
+        # Confirmed live: a duplicate/late end_live call re-read stream_key AFTER a prior call
+        # had already cleared it to "", enqueuing a doomed finalize_live_recording("") and
+        # overwriting a possibly-already-successful recording_status back to "pending". Calling
+        # this on an already-ended video is a no-op.
+        return video
+
     was_camera_mode = video.broadcast_mode == WebTVVideo.MODE_CAMERA
     stream_key = video.stream_key
 

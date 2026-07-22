@@ -25,6 +25,9 @@ def get_live_emission():
 
 @transaction.atomic
 def start_live(emission: Emission) -> Emission:
+    if emission.status == Emission.STATUS_LIVE:
+        return emission  # duplicate go_live call — already live, nothing to do
+
     fields = streaming_services.start_live_input(emission.title, media_type="audio")
     for attr, value in fields.items():
         setattr(emission, attr, value)
@@ -36,6 +39,12 @@ def start_live(emission: Emission) -> Emission:
 
 @transaction.atomic
 def end_live(emission: Emission) -> Emission:
+    if emission.status != Emission.STATUS_LIVE:
+        # Confirmed live (Web TV): a duplicate/late end_live call re-reading stream_key AFTER a
+        # prior call already cleared it enqueues a doomed finalize_live_recording("") and
+        # overwrites a possibly-already-successful recording_status back to "pending".
+        return emission
+
     stream_key = emission.stream_key
     streaming_services.stop_live_input(stream_key)
     emission.status = Emission.STATUS_RECORDED

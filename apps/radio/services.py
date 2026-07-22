@@ -10,6 +10,9 @@ CURRENT_KEY = "radio:current"
 
 @transaction.atomic
 def start_live(program: RadioProgram) -> RadioProgram:
+    if program.status == RadioProgram.STATUS_LIVE:
+        return program  # duplicate go_live call — already live, nothing to do
+
     fields = streaming_services.start_live_input(program.title, media_type="audio")
     for attr, value in fields.items():
         setattr(program, attr, value)
@@ -21,6 +24,12 @@ def start_live(program: RadioProgram) -> RadioProgram:
 
 @transaction.atomic
 def end_live(program: RadioProgram) -> RadioProgram:
+    if program.status != RadioProgram.STATUS_LIVE:
+        # Confirmed live (Web TV): a duplicate/late end_live call re-reading stream_key AFTER a
+        # prior call already cleared it enqueues a doomed finalize_live_recording("") and
+        # overwrites a possibly-already-successful recording_status back to "pending".
+        return program
+
     stream_key = program.stream_key
     streaming_services.stop_live_input(stream_key)
     program.status = RadioProgram.STATUS_ENDED
