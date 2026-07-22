@@ -120,11 +120,25 @@ endpoints, en particulier `/auth/login/`.
 | Action | Méthode | Endpoint |
 |---|---|---|
 | Liste (admin) | GET | `/users/` |
+| Créer un utilisateur (admin) | POST | `/users/` |
 | Détail / mise à jour partielle | GET / PATCH | `/users/{id}/` |
+| Supprimer un utilisateur (admin) | DELETE | `/users/{id}/` |
 | Favoris (artistes) | GET / POST | `/users/{id}/favorites/` |
 | Historique d'écoute | GET | `/users/{id}/history/` |
 | Signets (profil > signets) | GET | `/users/{id}/saved/` |
 | Activité (profil > activité) | GET | `/users/{id}/activity/` |
+
+`POST /users/` (admin) contourne le flux de vérification par e-mail de l'auto-inscription —
+l'utilisateur créé est `is_verified: true` par défaut :
+
+```json
+POST /users/
+{ "email": "nouveau@artdukivu.com", "username": "nouveau_membre", "password": "...", "role": "editor" }
+```
+
+`DELETE /users/{id}/` refuse la suppression de son propre compte par cette voie
+(`400 { "detail": "Vous ne pouvez pas supprimer votre propre compte." }`) — utiliser la
+déconnexion/suppression de compte self-service pour ce cas, pas cet endpoint admin.
 
 `/saved/` et `/activity/` ne sont lisibles que par l'utilisateur lui-même ou un admin (contrairement
 à `/favorites/`et `/history/`, publiques à tout utilisateur authentifié) — voir la section
@@ -250,25 +264,73 @@ GET /gamification/media-ranking/
 | Action | Méthode | Endpoint |
 |---|---|---|
 | Liste (filtrable par genre, ville) | GET | `/artists/` |
-| Détail | GET | `/artists/{slug}/` |
+| Détail (inclut `releases`, `videos`, `gallery`, `like_count`, `comment_count`) | GET | `/artists/{slug}/` |
 | Création/édition (admin) | POST / PATCH | `/artists/` / `/artists/{slug}/` |
+| Genres disponibles | GET | `/artists/genres/` |
+| J'aime / commentaires / partage / enregistrer | — | voir [engagement générique](#système-dengagement-générique) |
 
-`Artist.is_featured=True` marque l'"artiste du mois" repris sur la page d'accueil.
+`Artist.is_featured=True` marque l'"artiste du mois" repris sur la page d'accueil. `genres` se
+crée/modifie en écriture comme une liste d'identifiants (`"genres": [1, 2]`) ; la lecture
+(`ArtistDetailSerializer`) renvoie les objets complets `{id, name, slug}`.
+
+### Associer un son, une vidéo ou une photo à un artiste (admin)
+
+Chacune des trois galeries de la fiche artiste a son propre sous-endpoint CRUD, même forme
+partout : `GET`/`POST` sur la collection, `PATCH`/`DELETE` sur un élément précis.
+
+| Ressource | Liste / création | Détail (modifier/supprimer) |
+|---|---|---|
+| Sorties (releases) | GET / POST `/artists/{slug}/releases/` | PATCH / DELETE `/artists/{slug}/releases/{release_id}/` |
+| Vidéos | GET / POST `/artists/{slug}/videos/` | PATCH / DELETE `/artists/{slug}/videos/{video_id}/` |
+| Galerie photo | GET / POST `/artists/{slug}/gallery/` | PATCH / DELETE `/artists/{slug}/gallery/{photo_id}/` |
+
+```json
+POST /artists/aline-mwamba/videos/
+{
+  "title": "Clip officiel — Nouvel Album",
+  "thumbnail": "https://res.cloudinary.com/artdukivu/image/upload/v.../thumb.jpg",
+  "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "duration": "3:45"
+}
+```
+
+L'association d'un artiste à un **podcast** ne passe pas par ces sous-endpoints : elle se fait via
+le champ `guests` d'un épisode (voir [Podcasts](#podcasts)) — un invité peut pointer vers un
+`artist_id`.
 
 ## Articles et magazine
 
 | Action | Méthode | Endpoint |
 |---|---|---|
-| Liste (filtrable par `article_type=blog|magazine`, catégorie) | GET | `/articles/` |
+| Liste (filtrable par `article_type=blog|magazine`, `category=<slug>`) | GET | `/articles/` |
 | Détail | GET | `/articles/{slug}/` |
+| Création/édition (admin) | POST / PATCH | `/articles/` / `/articles/{slug}/` |
 | Commentaires (spécifiques aux articles, modèle historique) | GET / POST | `/articles/{slug}/comments/` |
 | J'aime (spécifique aux articles, modèle historique) | POST | `/articles/{slug}/like/` |
 | Tags | GET | `/articles/tags/` |
+| Catégories (liste) | GET | `/articles/categories/` |
+| Créer une catégorie (admin) | POST | `/articles/categories/` |
+| Modifier / supprimer une catégorie (admin) | PATCH / DELETE | `/articles/categories/{id}/` |
 
 **Note** : les articles utilisent leur propre modèle de commentaire/j'aime (antérieur au système
 d'engagement générique) — ne pas confondre avec les actions `/comments/`, `/like/` génériques
 décrites plus bas, qui elles s'appliquent aux podcasts, vidéos web-tv, sorties, posts communauté
 et émissions.
+
+Le champ `category` en écriture (`POST`/`PATCH /articles/`) accepte **soit l'id numérique, soit le
+slug** de la catégorie (`"category": "arts-visuels"` ou `"category": 5` fonctionnent tous les
+deux) — et il est facultatif : un article peut être créé sans catégorie.
+
+### Statut brouillon / programmé / publié
+
+`status` ∈ `draft | published`. Un article `draft` avec `scheduled_at` renseigné (date future)
+bascule **automatiquement** à `published` une fois cette date passée (tâche planifiée, vérifiée
+toutes les 5 minutes) — pas besoin d'un appel PATCH manuel au moment voulu :
+
+```json
+POST /articles/
+{ "title": "...", "content": "...", "status": "draft", "scheduled_at": "2026-08-15T08:00:00Z" }
+```
 
 Le "magazine" de la page d'accueil correspond aux `Article` avec `article_type="magazine"` — voir
 [Page d'accueil](#page-daccueil).
@@ -288,18 +350,71 @@ Le "magazine" de la page d'accueil correspond aux `Article` avec `article_type="
 | Action | Méthode | Endpoint |
 |---|---|---|
 | Liste des séries (filtrable par `category`, `is_featured`) | GET | `/podcasts/series/` |
+| Création/édition d'une série (admin) | POST / PATCH | `/podcasts/series/` / `/podcasts/series/{slug}/` |
 | Catégories disponibles | GET | `/podcasts/series/categories/` |
 | Épisodes d'une série | GET | `/podcasts/series/{slug}/episodes/` |
-| Liste des épisodes (filtrable par `series`, `category`, `is_featured`) | GET | `/podcasts/episodes/` |
+| Liste des épisodes (filtrable par `series`, `category`, `is_featured`, `guest_artist`) | GET | `/podcasts/episodes/` |
 | Détail d'un épisode | GET | `/podcasts/episodes/{slug}/` |
+| Création/édition d'un épisode (admin) | POST / PATCH | `/podcasts/episodes/` / `/podcasts/episodes/{slug}/` |
 | Incrémenter le compteur d'écoute | POST | `/podcasts/episodes/{slug}/play/` |
 | J'aime / commentaires / partage / enregistrer | — | voir [engagement générique](#système-dengagement-générique) |
 
+`audio_url` (résolution automatique : `audio_file` Cloudinary si présent, sinon `audio_url`
+externe) est maintenant présent **à la fois sur la liste et le détail** — plus besoin d'un appel
+détail supplémentaire par épisode juste pour obtenir de quoi jouer l'audio.
+
+### Invités (`guests`)
+
+Un invité peut être lié à un artiste existant, à un utilisateur existant, ou n'être qu'un nom
+libre (aucun compte) — les trois formes coexistent dans la même liste :
+
+```json
+{
+  "guests": [
+    { "name": "Aline Mwamba", "artist_id": 12, "user_id": null },
+    { "name": "Jean Dupont", "artist_id": null, "user_id": 8 },
+    { "name": "Invité surprise", "artist_id": null, "user_id": null }
+  ]
+}
+```
+
+`name` est toujours requis et toujours ce qu'il faut afficher tel quel (le "jina" de l'invité) —
+`artist_id`/`user_id` ne servent qu'à faire un lien cliquable vers la fiche artiste/profil quand
+ils sont présents. Un épisode donné n'a jamais `artist_id` **et** `user_id` renseignés à la fois
+sur un même invité.
+
+Pour lister les épisodes où un artiste donné est invité : `GET /podcasts/episodes/?guest_artist=12`.
+
+### Podcast autonome vs série (`is_series`)
+
+`PodcastSeries` peut porter son propre audio (`audio_file`/`audio_url`, `cover_url`, `duration`) —
+c'est ce qui permet d'afficher un podcast comme un contenu **autonome**, sans épisode du tout.
+`is_series` passe automatiquement à `true` dès qu'un **second** épisode est rattaché à la série (le
+premier épisode ne suffit pas à lui seul — il reste équivalent au cas autonome) ; ce champ ne
+redescend jamais à `false` ensuite, même si des épisodes sont supprimés. Utiliser `is_series` pour
+décider l'affichage : `false` → jouer l'audio de la série elle-même ; `true` → afficher la liste
+d'épisodes.
+
+```json
+GET /podcasts/series/mon-podcast/
+{
+  "title": "Mon Podcast", "audio_url": "https://...", "duration": "38:20",
+  "is_series": false, "episode_count": 1
+}
+```
+
+### Statut brouillon / programmé / publié (épisodes)
+
+Même mécanique que les articles : `status` ∈ `draft | published` sur `PodcastEpisode`. Un épisode
+`draft` n'apparaît jamais dans les réponses publiques (seuls les comptes admin le voient) ; s'il
+porte un `published_at` déjà passé au moment de sa création, il reste `draft` jusqu'à ce que la
+tâche planifiée (vérifiée toutes les 5 minutes) le bascule en `published` — ne pas compter sur
+`published_at` seul pour décider de la visibilité, toujours vérifier `status`.
+
 Le détail d'un épisode (`EpisodeDetailSerializer`) contient tout ce qu'il faut pour un lecteur
 audio : `title`, `duration` (chaîne, ex. `"42:10"`), `description` (utilisé comme légende/infos),
-`audio_url` (résout `audio_file` Cloudinary ou `audio_url` externe), `cover_url`,
-`episode_number`, `season_number`, `guests`, `published_at`, `transcript` (texte intégral de la
-transcription, facultatif — vide si non fournie par l'admin).
+`audio_url`, `cover_url`, `episode_number`, `season_number`, `guests`, `status`, `published_at`,
+`transcript` (texte intégral de la transcription, facultatif — vide si non fournie par l'admin).
 
 ## Radio
 
@@ -311,6 +426,7 @@ transcription, facultatif — vide si non fournie par l'admin).
 | Chat (poster un message — authentifié) | POST | `/radio/chat/` |
 | Diffuser en direct (admin) | POST | `/radio/program/{id}/go_live/` |
 | Arrêter le direct (admin) | POST | `/radio/program/{id}/end_live/` |
+| J'aime / commentaires / partage / enregistrer | — | voir [engagement générique](#système-dengagement-générique) |
 
 `GET /radio/current/` n'est **pas** mis en cache côté serveur (contrairement aux autres listes) :
 `listener_count` y est lu en direct depuis la présence WebSocket, l'appeler en polling toutes les
@@ -325,7 +441,7 @@ transcription, facultatif — vide si non fournie par l'admin).
   "end_time": "14:00:00",
   "status": "live",
   "stream_url": "",
-  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/live/<clé>/index.m3u8",
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/audio_<clé>/index.m3u8",
   "listener_count": 42
 }
 ```
@@ -339,7 +455,7 @@ présence/push que les autres salons — voir [Temps réel](#temps-réel--websoc
 | Action | Méthode | Endpoint |
 |---|---|---|
 | Catalogue (filtrable par `category`) | GET | `/webtv/videos/` |
-| Détail | GET | `/webtv/videos/{slug}/` |
+| Détail (inclut `artist_names`, comme la liste) | GET | `/webtv/videos/{slug}/` |
 | Vidéo en direct actuelle | GET | `/webtv/videos/live/` |
 | Premières (5 dernières) | GET | `/webtv/videos/premiers/` |
 | Incrémenter le compteur de vues | POST | `/webtv/videos/{slug}/view/` |
@@ -356,6 +472,15 @@ Le catalogue "pas en direct" (toutes les autres vidéos) s'obtient en filtrant c
 `is_live=false`, ou via `?is_live=false` si un filtre dédié est ajouté côté backend (à date, le
 filtrage disponible est par `category` — trier côté client ou demander l'ajout du filtre si
 nécessaire).
+
+### `broadcast_mode` : direct fichier vs direct caméra
+
+`broadcast_mode` ∈ `playout | camera`, présent sur liste et détail :
+- **`playout`** (par défaut) : une vidéo pré-enregistrée, `video_url` obligatoire.
+- **`camera`** : un direct caméra pur (pas de fichier existant) — `video_url` **facultatif**,
+  la lecture se fait via `playback_hls_url` une fois `go_live` appelé, exactement comme les
+  autres surfaces live. Ne plus envoyer d'URL factice/placeholder pour ce cas — laisser
+  `video_url` vide.
 
 ## Émissions live
 
@@ -381,6 +506,7 @@ grille de programmes + son propre chat.
 | Chat (lecture/écriture) | GET / POST | `/live_music/sessions/{slug}/chat/` |
 | Diffuser en direct (admin) | POST | `/live_music/sessions/{slug}/go_live/` |
 | Arrêter le direct (admin) | POST | `/live_music/sessions/{slug}/end_live/` |
+| J'aime / commentaires / partage / enregistrer | — | voir [engagement générique](#système-dengagement-générique) |
 
 ```json
 // GET /live_music/sessions/current/
@@ -392,7 +518,7 @@ grille de programmes + son propre chat.
   "status": "live",
   "cover_url": "https://res.cloudinary.com/.../cover.jpg",
   "scheduled_at": "2026-07-11T18:00:00Z",
-  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/live/<clé>/index.m3u8",
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/audio_<clé>/index.m3u8",
   "online_followers": 128,
   "live_started_at": "2026-07-11T18:00:00Z"
 }
@@ -409,12 +535,16 @@ d'appeler cet endpoint en boucle.
 
 | Action | Méthode | Endpoint |
 |---|---|---|
-| Liste des posts (filtrable par `?type=talent|art|news`) | GET | `/community/posts/` |
+| Liste des posts (filtrable par `?post_type=talent|art|news|challenge_response`, `?challenge=<slug>`) | GET | `/community/posts/` |
 | Créer un post (authentifié) | POST | `/community/posts/` |
-| Soumettre un talent (chanson ou vidéo, authentifié) | POST | `/community/posts/submit_talent/` |
+| Modifier son propre post (auteur ou admin) | PATCH | `/community/posts/{id}/` |
+| Supprimer (auteur ou admin) | DELETE | `/community/posts/{id}/` |
+| Soumettre un talent (chanson, vidéo ou image, authentifié) | POST | `/community/posts/submit_talent/` |
 | J'aime un post (authentifié, historique — pas le système générique) | POST | `/community/posts/{id}/like/` |
 | Commentaires / partage / enregistrer (système générique) | — | voir [engagement générique](#système-dengagement-générique) |
-| Défis | GET | `/community/challenges/` |
+| Défis (liste, détail) | GET | `/community/challenges/`, `/community/challenges/{slug}/` |
+| Répondre à un défi | POST | `/community/challenges/{slug}/participate/` |
+| Publier le résultat épinglé (admin) | POST | `/community/challenges/{slug}/publish_result/` |
 | Sondages (liste, vote) | GET / POST | `/community/polls/`, `/community/polls/{id}/vote/` |
 
 ```http
@@ -424,16 +554,63 @@ Content-Type: application/json
 
 {
   "title": "Mon freestyle du dimanche",
+  "content": "Enregistré ce week-end, dites-moi ce que vous en pensez !",
   "media": [
     { "type": "song", "url": "https://res.cloudinary.com/.../audio.mp3" }
   ]
 }
 ```
 
-`media` accepte un ou plusieurs éléments, chacun avec `type` égal à `"song"`, `"video"` ou
-`"image"` (le fichier doit avoir été téléversé au préalable vers Cloudinary par le frontend ; ce
-endpoint n'accepte que la référence, pas un fichier brut). La réponse renvoie le post créé avec
-`post_type: "talent"`.
+`title` et `content` sont désormais tous les deux requis (texte descriptif de la soumission, pas
+seulement un titre) ; `media` accepte un ou plusieurs éléments, chacun avec `type` égal à `"song"`,
+`"video"` ou `"image"` (le fichier doit avoir été téléversé au préalable vers Cloudinary par le
+frontend ; ce endpoint n'accepte que la référence, pas un fichier brut — voir [Upload de
+médias](#upload-de-médiasaudiovidéoimage)). La réponse renvoie le post créé avec
+`post_type: "talent"`. `POST /community/posts/` (le endpoint générique, pas `submit_talent`)
+accepte aussi `title` depuis cette session — les deux formes sont désormais équivalentes côté
+champs disponibles.
+
+Modifier son propre post (`PATCH /community/posts/{id}/`) n'autorise que `title`/`content`/
+`media`/`post_type` — jamais `challenge` ni `is_pinned_result`, qui restent contrôlés côté serveur.
+Un utilisateur qui n'est ni l'auteur ni admin reçoit `403`.
+
+### Défis — répondre, savoir si on a déjà participé, résultat épinglé
+
+Répondre à un défi suit exactement la même forme que `submit_talent` :
+
+```http
+POST /api/v1/community/challenges/reprise-acoustique/participate/
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "title": "Ma reprise acoustique",
+  "content": "Voici ma participation !",
+  "media": [{ "type": "song", "url": "https://res.cloudinary.com/.../audio.mp3" }]
+}
+```
+
+La réponse est un `CommunityPost` avec `post_type: "challenge_response"` et `challenge:
+"reprise-acoustique"` (le slug du défi). Une seconde tentative de participation au même défi par
+le même utilisateur renvoie `400 { "detail": "Vous participez déjà à ce défi.", "code":
+"already_joined" }` — un utilisateur ne peut répondre qu'une fois par défi.
+
+`GET /community/challenges/{slug}/` (et la liste) expose `has_participated: boolean` pour
+l'utilisateur authentifié courant (toujours `false` pour un appel anonyme) — utiliser ce champ
+pour masquer le bouton "Participer" et afficher "Vous avez déjà participé" à la place, plutôt que
+de se fier à l'erreur `already_joined` pour piloter l'UI.
+
+Les participations d'un défi s'affichent comme des posts normaux (mêmes likes/commentaires/
+partage/signets que les talents) via le filtre déjà existant sur la liste des posts :
+
+```
+GET /community/posts/?post_type=challenge_response&challenge=reprise-acoustique
+```
+
+Un résultat de défi épinglé (annoncé par l'admin une fois le défi terminé) se publie via
+`POST /community/challenges/{slug}/publish_result/` (réservé au staff), même forme de corps que
+`participate/`. Le post créé porte `is_pinned_result: true` — l'afficher épinglé en tête de la
+liste des participations plutôt que trié par date comme les autres.
 
 ## Sorties musicales (releases)
 
@@ -453,8 +630,9 @@ utiliser les endpoints hérités d'`apps.artists` s'il devait en exister un équ
 ## Système d'engagement générique
 
 Quatre actions identiques sont disponibles sur les ressources suivantes : **podcasts (épisodes)**,
-**web-tv (vidéos)**, **releases (sorties)**, **community (posts)**, **emissions**. Le motif est
-strictement le même partout — seul le préfixe de ressource change.
+**web-tv (vidéos)**, **releases (sorties)**, **community (posts)**, **emissions**, **radio
+(programs)**, **live_music (sessions)**, **artists**. Le motif est strictement le même partout —
+seul le préfixe de ressource change.
 
 | Action | Méthode | Endpoint | Authentification |
 |---|---|---|---|
@@ -670,7 +848,7 @@ un champ de lecture une fois en direct : `RadioProgram`, `Emission`, `WebTVVideo
 
 ```json
 {
-  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/live/<clé>/index.m3u8"
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/<clé>/index.m3u8"
 }
 ```
 
@@ -678,6 +856,12 @@ Ce champ est vide tant que la ressource n'est pas en direct. **Les champs `rtmp_
 `stream_key` ne sont jamais renvoyés par les endpoints de lecture publics** — ils ne sont
 disponibles que dans la réponse de l'action admin `go_live` (à usage du logiciel de diffusion,
 type OBS Studio), jamais persistés côté client.
+
+**Seul Web TV diffuse de la vidéo** — Radio, Émissions et Live Music sont strictement audio (la
+vidéo est supprimée côté serveur si l'opérateur en envoie quand même). `stream_key` est préfixé
+en conséquence (`audio_...` / `video_...`) et **toujours régénéré à chaque `go_live`**, jamais
+réutilisé — reconfigurer OBS avec la nouvelle clé à chaque démarrage. Détails complets, y compris
+le pourquoi de ce choix : `docs/LIVE_STREAMING.md`.
 
 ### Configuration côté OBS (ou équivalent)
 
@@ -687,8 +871,8 @@ type OBS Studio), jamais persistés côté client.
 {
   "status": "live",
   "rtmp_server_url": "rtmp://art-du-kivu-api.kelor.tech:1935/live",
-  "stream_key": "3f9a2b1c8e4d5f6a7b8c9d0e1f2a3b4c",
-  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/live/3f9a2b1c.../index.m3u8"
+  "stream_key": "audio_3f9a2b1c8e4d5f6a7b8c9d0e1f2a3b4c",
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/audio_3f9a2b1c.../index.m3u8"
 }
 ```
 
@@ -696,6 +880,10 @@ Dans OBS : Paramètres → Flux → Service = *Personnalisé...* → **Serveur**
 **Clé de flux** = `stream_key`. Contrairement à l'ancienne intégration Cloudflare (RTMPS
 obligatoire, source probable des déconnexions répétées observées avec OBS), c'est du RTMP
 classique — le même protocole que Twitch/YouTube/Facebook utilisent par défaut.
+
+**Rappeler `go_live`, même sur une ressource déjà en direct, renvoie une clé différente à chaque
+fois** — pas d'idempotence ici (voir `docs/LIVE_STREAMING.md` pour le pourquoi). Le panneau admin
+doit donc toujours ré-afficher/reconfigurer OBS après chaque appel, pas seulement au premier.
 
 ### Lecture HLS avec `hls.js` (React)
 
@@ -859,6 +1047,23 @@ Réponse agrégée, mise en cache 15 minutes côté serveur :
 
 Chaque sous-section peut être `null` (aucun artiste/podcast/événement à la une configuré) — le
 frontend doit gérer l'absence de contenu (masquer la section plutôt que planter).
+
+### Bannière d'accueil configurable (admin)
+
+```
+GET / PATCH /api/v1/home/banner/
+```
+
+Singleton (une seule bannière) — `GET` public, `PATCH` réservé au staff :
+
+```json
+PATCH /home/banner/
+{ "title": "Bienvenue sur Art du Kivu", "cta_label": "Écouter", "cta_url": "https://..." }
+```
+
+**Propagation** : cet endpoint reflète le changement immédiatement, mais `GET /home/` (page
+d'accueil agrégée) est mis en cache serveur 15 minutes — la nouvelle bannière peut mettre jusqu'à
+15 minutes à apparaître sur `/home/` après un `PATCH` réussi sur `/home/banner/`.
 
 ## Recherche
 

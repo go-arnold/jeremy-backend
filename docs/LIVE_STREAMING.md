@@ -45,8 +45,28 @@ qui construit l'intégration live côté `frontend_admin` et `frontend_client`.
 - **Ingestion** : un logiciel de diffusion (OBS Studio ou équivalent) pousse un flux RTMP vers
   **MediaMTX**, un serveur média auto-hébergé (remplace Cloudflare Stream). Voir
   `docs/README.md` section "Streaming en direct" pour le détail de l'infrastructure.
-- **Lecture** : MediaMTX ré-encode le flux en HLS, servi sous `/live-hls/live/<clé>/index.m3u8`
-  sur le même domaine que l'API (HTTPS, pas de port séparé côté client).
+- **Transcodage** : le flux brut ingéré (`live/<clé>`) n'est **jamais** servi tel quel — un hook
+  ffmpeg le retraite systématiquement vers un second chemin (`processed/<clé>`), qui est le seul
+  jamais exposé en lecture. Deux profils selon le type de surface (voir juste après) : audio-only
+  (vidéo supprimée) pour Radio/Émissions/Live Music, vidéo plafonnée à 720p/1.5Mbps pour Web TV.
+- **Lecture** : servie sous `/live-hls/processed/<clé>/index.m3u8` sur le même domaine que
+  l'API (HTTPS, pas de port séparé côté client).
+
+### Audio seul vs vidéo : qui diffuse quoi
+
+**Seul Web TV diffuse de la vidéo.** Radio, Émissions et Live Music sont **strictement audio** —
+même si l'opérateur pousse un flux avec de la vidéo dessus depuis OBS, elle est supprimée avant
+d'atteindre le lecteur (le hook ffmpeg applique `-vn`, "no video", sur ces trois surfaces). Ce
+n'est pas une convention à respecter côté client, c'est appliqué côté serveur :
+
+| Surface | Profil de transcodage | Résultat pour le lecteur |
+|---|---|---|
+| Radio, Émissions, Live Music | Audio seul — vidéo supprimée, AAC 128kbps/44.1kHz | `<audio>` uniquement, même si la source avait de la vidéo |
+| Web TV | Vidéo H.264 plafonnée 720p/1.5Mbps + audio AAC 128kbps | `<video>` |
+
+Objectif : qualité audio correcte sans le coût de données mobiles d'un flux vidéo inutile sur les
+trois premières surfaces, et un débit vidéo maîtrisé (pas de passthrough brut du bitrate envoyé
+par l'opérateur) sur Web TV.
 - **Statut** : une tâche Celery (`apps.streaming.tasks.sync_live_status`, toutes les 15s)
   interroge l'API MediaMTX pour savoir quels `stream_key` sont réellement en train d'être
   publiés, et bascule le statut de la ressource correspondante (`Emission`, `RadioProgram`,
@@ -65,15 +85,21 @@ qui construit l'intégration live côté `frontend_admin` et `frontend_client`.
 
 | Concept | Ce que c'est |
 |---|---|
-| `stream_key` | Identifiant aléatoire (32 caractères hex) généré au premier `go_live` — sert à la fois de nom de chemin RTMP et de secret de diffusion (le "Stream key" à donner à OBS). Jamais renvoyé par les endpoints publics de lecture, uniquement par `go_live` (réservé admin). |
+| `stream_key` | Identifiant aléatoire (32 caractères hex), préfixé par le profil (`audio_...` ou `video_...`), **régénéré à chaque appel `go_live`** — sert à la fois de nom de chemin RTMP et de secret de diffusion (le "Stream key" à donner à OBS). Jamais renvoyé par les endpoints publics de lecture, uniquement par `go_live` (réservé admin). |
 | `rtmp_server_url` | Constante (ne change jamais), ex. `rtmp://art-du-kivu-api.kelor.tech:1935/live` — le champ "Serveur" d'OBS. |
-| `playback_hls_url` | URL HLS publique, ex. `https://art-du-kivu-api.kelor.tech/live-hls/live/<clé>/index.m3u8` — vide tant que la ressource n'est pas en direct. |
+| `playback_hls_url` | URL HLS publique, ex. `https://art-du-kivu-api.kelor.tech/live-hls/processed/<clé>/index.m3u8` — vide tant que la ressource n'est pas en direct. |
 | `room_type` | Identifie le salon WebSocket : `radio`, `emission`, `webtv`, `live_music`. |
 | `room_id` | L'identifiant de la ressource dans ce salon (voir tableau plus bas — radio utilise un id fixe `"live"`, les autres utilisent le `pk` numérique de la ressource). |
 | Statut live | `Emission.status` / `RadioProgram.status` / `MusicLiveSession.status` valent `"live"` quand en direct ; `WebTVVideo` utilise un booléen `is_live`. |
 
-**Idempotence** : rappeler `go_live` sur une ressource déjà en direct **réutilise** le même
-`stream_key` (OBS n'a jamais besoin d'être reconfiguré) et ne réinitialise pas `live_started_at`.
+**Pas d'idempotence — c'est volontaire** : rappeler `go_live` sur une ressource, même déjà en
+direct, génère **toujours** une nouvelle `stream_key` et réinitialise `live_started_at`.
+L'opérateur doit reconfigurer OBS (nouvelle clé de flux) à chaque `go_live`. Ce choix corrige un
+bug réel observé en production : réutiliser l'ancienne clé pouvait laisser une session
+précédente mal fermée "polluer" la nouvelle avec ses derniers segments HLS (effet de
+répétition/duplicat au démarrage d'un nouveau direct) — une clé neuve à chaque fois élimine ce
+risque par construction. Le panneau admin doit donc **toujours ré-afficher les nouvelles
+identifiants après un `go_live`**, même si la ressource était déjà en direct.
 
 ## Référence des endpoints — les 4 surfaces live
 
@@ -116,8 +142,9 @@ Préfixes réels et particularités par surface :
 - Chat : `GET`/`POST /api/v1/radio/chat/`, suppression `DELETE /api/v1/radio/chat/{id}/`
   (auteur ou admin). Room WebSocket : `room_type="radio"`, `room_id="live"` (fixe, un seul salon
   pour toute la radio — pas par programme).
-- **Pas de j'aime/commentaire/partage/save générique sur `RadioProgram`** (pas de
-  `EngagementActionsMixin` monté) — seul le chat existe.
+- J'aime/commentaire/partage/save génériques disponibles sur `RadioProgram` comme sur les 3
+  autres surfaces (`EngagementActionsMixin` monté depuis cette session) — voir le tableau
+  d'actions plus haut, `save` reste refusé tant que `status == "live"`.
 
 ### Web TV — `/api/v1/webtv/videos/`
 - `{id}` = `slug`. Champ `is_live` (booléen, pas de champ `status`).
@@ -373,5 +400,10 @@ déconnexion seront rejoués.
    onglets via `chat.message`.
 7. Arrêter OBS (pas `end_live`) et confirmer que le statut repasse tout seul à "non live" au
    sondage suivant (≤ 15s, une fois le délai de grâce de 45s dépassé).
-8. Rappeler `go_live` et confirmer que `stream_key` est **identique** à la première fois
-   (idempotence — OBS n'a pas besoin d'être reconfiguré).
+8. Rappeler `go_live` et confirmer que `stream_key` est **différent** de la première fois (pas
+   de réutilisation — OBS doit être reconfiguré avec la nouvelle clé) ; confirmer aussi qu'aucun
+   segment de l'ancienne diffusion ne réapparaît sur le nouveau `playback_hls_url`.
+9. Pour une surface audio (Radio/Émissions/Live Music) : confirmer qu'un flux poussé avec de la
+   vidéo (test `ffmpeg` avec une source vidéo quelconque) n'affiche **aucune image** côté lecteur
+   — seul l'audio doit passer. Pour Web TV, confirmer que la vidéo est bien plafonnée (pas de
+   4K/bitrate brut de la source qui passe tel quel).
