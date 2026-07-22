@@ -94,7 +94,7 @@ def sync_live_status() -> None:
             video.save(update_fields=["is_live"])
 
 
-@shared_task(queue="default", bind=True, max_retries=2, default_retry_delay=15)
+@shared_task(queue="default", bind=True, max_retries=5, default_retry_delay=15)
 def finalize_live_recording(
     self,
     app_label: str,
@@ -127,8 +127,11 @@ def finalize_live_recording(
     matches = sorted(glob.glob(pattern))
     if not matches:
         # A fresh recording always has at least one open/flushed segment within a few seconds of
-        # the stream ending — one retry covers MediaMTX not having flushed it to disk yet. If it's
-        # still missing after that, recording never actually started (nothing left to wait for).
+        # the stream ending — retrying covers MediaMTX not having flushed it to disk yet. If it's
+        # still missing after all retries, recording never actually started (nothing left to wait
+        # for). The same retry budget below also has to absorb kick_publisher's real end-to-end
+        # shutdown latency (confirmed live: runOnReadyRestart briefly relaunching the transcode
+        # hook before the raw source is fully gone can push this past 50s in some cases).
         if self.request.retries < self.max_retries:
             raise self.retry()
         logger.error("finalize_live_recording: no recording file for stream_key=%s", stream_key)
