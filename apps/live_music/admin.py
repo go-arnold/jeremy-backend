@@ -5,8 +5,8 @@ from .models import MusicLiveSession, MusicLiveSlot
 
 @admin.register(MusicLiveSession)
 class MusicLiveSessionAdmin(admin.ModelAdmin):
-    list_display = ("title", "status", "live_started_at", "created_at")
-    list_filter = ("status",)
+    list_display = ("title", "status", "recording_status", "live_started_at", "created_at")
+    list_filter = ("status", "recording_status")
     search_fields = ("title",)
 
 
