@@ -57,7 +57,7 @@ def end_live(emission: Emission) -> Emission:
 
     from apps.streaming.tasks import finalize_live_recording
 
-    finalize_live_recording.delay("emissions", "Emission", emission.pk, stream_key)
+    finalize_live_recording.delay("emissions", "Emission", emission.pk, stream_key, url_field="audio_url")
 
     return emission
 
