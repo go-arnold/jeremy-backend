@@ -29,6 +29,29 @@ hlsSegmentDuration: 2s
 api: yes
 apiAddress: :9997
 
+# MediaMTX's built-in default here restricts the "api"/"metrics"/"pprof" actions to requests
+# originating from 127.0.0.1/::1 — confirmed live: apps.streaming.client.list_ready_stream_keys()
+# (called by the `worker` container, a different IP on the docker network) got a 401
+# "authentication error" from this exact endpoint every time. Port 9997 is never published to the
+# host (see docker-compose.yaml) — only containers already inside this private compose network
+# can reach it at all — so widening these three actions to any source IP here adds no real
+# exposure. publish/read/playback keep the same unrestricted defaults they already had.
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: api
+      - action: metrics
+      - action: pprof
+
 # Every broadcast pushes to "live/<media_type>_<key>" (apps/streaming/services.py generates the
 # key with that prefix). Each path pattern below transcodes the raw ingest into a
 # quality/bitrate-controlled copy republished under "processed/live/<media_type>_<key>" — the
