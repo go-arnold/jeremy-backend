@@ -30,14 +30,29 @@ def run_playout_stream(video_id: int, stream_key: str, video_url: str) -> None:
     the video finishes playing; `end_live()` revoking this task's id (SIGTERM, see the handler
     below) is what happens when an admin ends it manually instead.
     """
+    # Always re-encode rather than -c copy: FLV/RTMP only carries H.264 video + AAC audio at
+    # 44100/22050/11025 Hz — an uploaded file can be anything Cloudinary accepts (AV1/Opus webm,
+    # HEVC, whatever), and stream-copying a codec FLV can't hold fails outright ("Conversion
+    # failed!", confirmed live). Re-encoding here also means this never has to assume anything
+    # about the source's format.
     process = subprocess.Popen(
         [
             "ffmpeg",
             "-re",
             "-i",
             video_url,
-            "-c",
-            "copy",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-ar",
+            "44100",
+            "-b:a",
+            "128k",
             "-f",
             "flv",
             f"rtmp://mediamtx:1935/live/{stream_key}",
