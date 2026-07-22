@@ -23,11 +23,13 @@ class VideoListSerializer(serializers.ModelSerializer):
             "is_premier",
             "is_live",
             "broadcast_mode",
+            "recording_status",
             "location",
             "artist_names",
             "view_count",
             "published_at",
         ]
+        extra_kwargs = {"recording_status": {"read_only": True}}
 
     def get_thumbnail_url(self, obj):
         return resolve_cloudinary_url(obj.thumbnail, "image")
@@ -57,6 +59,7 @@ class VideoDetailSerializer(serializers.ModelSerializer):
             "is_premier",
             "is_live",
             "broadcast_mode",
+            "recording_status",
             "location",
             "artist_names",
             "view_count",
@@ -64,6 +67,7 @@ class VideoDetailSerializer(serializers.ModelSerializer):
             "comment_count",
             "published_at",
         ]
+        extra_kwargs = {"recording_status": {"read_only": True}}
 
     def get_thumbnail_url(self, obj):
         return resolve_cloudinary_url(obj.thumbnail, "image")

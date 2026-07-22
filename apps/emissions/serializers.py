@@ -17,11 +17,13 @@ class EmissionListSerializer(serializers.ModelSerializer):
             "slug",
             "cover_url",
             "status",
+            "recording_status",
             "scheduled_at",
             "duration_minutes",
             "viewer_count",
             "total_views",
         ]
+        extra_kwargs = {"recording_status": {"read_only": True}}
 
     def get_cover_url(self, obj):
         return resolve_cloudinary_url(obj.cover, "image")
@@ -43,7 +45,9 @@ class EmissionDetailSerializer(serializers.ModelSerializer):
             "cover_url",
             "stream_url",
             "playback_hls_url",
+            "video_url",
             "status",
+            "recording_status",
             "scheduled_at",
             "duration_minutes",
             "viewer_count",
@@ -53,6 +57,7 @@ class EmissionDetailSerializer(serializers.ModelSerializer):
             "comment_count",
             "created_at",
         ]
+        extra_kwargs = {"recording_status": {"read_only": True}, "video_url": {"read_only": True}}
 
     def get_cover_url(self, obj):
         return resolve_cloudinary_url(obj.cover, "image")

@@ -36,11 +36,20 @@ def start_live(emission: Emission) -> Emission:
 
 @transaction.atomic
 def end_live(emission: Emission) -> Emission:
-    streaming_services.stop_live_input(emission.stream_key)
+    stream_key = emission.stream_key
+    streaming_services.stop_live_input(stream_key)
     emission.status = Emission.STATUS_RECORDED
     emission.stream_key = ""
+    # Emissions have no playout/camera distinction (see WebTVVideo) — every emission broadcast
+    # is a real live feed, so it's always recorded, unconditionally.
+    emission.recording_status = Emission.RECORDING_PENDING
     emission.save()
     cache.delete(LIVE_KEY)
+
+    from apps.streaming.tasks import finalize_live_recording
+
+    finalize_live_recording.delay("emissions", "Emission", emission.pk, stream_key)
+
     return emission
 
 

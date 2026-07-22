@@ -57,5 +57,15 @@ paths:
 
   # Transcoded output landing path — republished here by the ffmpeg hooks above (as
   # "processed/live/<key>", see the note above), this is what HLS/playback is actually served
-  # from.
+  # from. Also recorded here (not the raw ingest) so the saved file matches exactly what
+  # viewers watched. apps.streaming.tasks.finalize_live_recording (triggered from end_live)
+  # uploads the finished segment to Cloudinary and deletes it locally; recordDeleteAfter is only
+  # a backup cleanup net in case that upload step itself ever fails. recordSegmentDuration is
+  # deliberately longer than any realistic single broadcast so one live session produces exactly
+  # one file — a broadcast longer than 12h would split into multiple segments (not handled).
   "~^processed/live/(.+)$":
+    record: yes
+    recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+    recordFormat: fmp4
+    recordSegmentDuration: 12h
+    recordDeleteAfter: 24h

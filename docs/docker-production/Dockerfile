@@ -37,8 +37,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # libpq5 (runtime client lib for psycopg2) + curl (healthcheck) — no compiler needed here.
+# ffmpeg: only the `worker` service actually needs it (apps.webtv.tasks.run_playout_stream
+# shells out to it to push an uploaded video into the live pipeline) — api/worker/beat share
+# this one image, so it ships in all three rather than maintaining a 4th image just for that.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 curl \
+    libpq5 curl ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv

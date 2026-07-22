@@ -40,6 +40,9 @@ services:
     restart: unless-stopped
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
+      # Shared with `worker` below (read/write) — apps.streaming.tasks.finalize_live_recording
+      # reads the finished recording file straight off disk to upload it, no HTTP proxy needed.
+      - mediamtx_recordings:/recordings
     ports:
       # RTMP ingest must be reachable directly from the public internet (broadcasters connect
       # from outside Docker entirely) — the secret is the stream_key itself, not network
@@ -98,6 +101,10 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: settings.production
       ELASTICSEARCH_URL: http://elasticsearch:9200
+    volumes:
+      # Read-only from this side would be ideal, but finalize_live_recording deletes the file
+      # after a successful upload — needs write access to do that cleanup itself.
+      - mediamtx_recordings:/recordings
     depends_on:
       api:
         condition: service_healthy
@@ -139,3 +146,4 @@ volumes:
   static_files:
   media_files:
   es_data:
+  mediamtx_recordings:

@@ -27,15 +27,47 @@ def start_live(video: WebTVVideo) -> WebTVVideo:
         setattr(video, attr, value)
     video.is_live = True
     video.save()
+
+    if video.broadcast_mode == WebTVVideo.MODE_PLAYOUT:
+        # Server pushes the already-uploaded file into the same "live/<key>" path a real OBS
+        # broadcast would use — the existing runOnReady transcode hook picks it up identically,
+        # no separate code path needed downstream (chat/is_live/HLS all behave the same).
+        from .tasks import run_playout_stream
+
+        result = run_playout_stream.delay(video.pk, video.stream_key, video.video_url)
+        WebTVVideo.objects.filter(pk=video.pk).update(playout_task_id=result.id)
+        video.playout_task_id = result.id
+
     return video
 
 
 @transaction.atomic
 def end_live(video: WebTVVideo) -> WebTVVideo:
-    streaming_services.stop_live_input(video.stream_key)
+    was_camera_mode = video.broadcast_mode == WebTVVideo.MODE_CAMERA
+    stream_key = video.stream_key
+
+    if video.playout_task_id:
+        from artdukivu.celery import app as celery_app
+
+        celery_app.control.revoke(video.playout_task_id, terminate=True, signal="SIGTERM")
+        video.playout_task_id = ""
+
+    streaming_services.stop_live_input(stream_key)
     video.is_live = False
     video.stream_key = ""
+
+    if was_camera_mode:
+        # A playout broadcast is already a saved video — nothing to record. A real camera
+        # broadcast just ended: capture what MediaMTX recorded and turn it into a normal VOD.
+        video.recording_status = WebTVVideo.RECORDING_PENDING
+
     video.save()
+
+    if was_camera_mode:
+        from apps.streaming.tasks import finalize_live_recording
+
+        finalize_live_recording.delay("webtv", "WebTVVideo", video.pk, stream_key)
+
     return video
 
 

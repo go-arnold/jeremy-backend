@@ -28,6 +28,17 @@ class WebTVVideo(LiveStreamFields, Engageable):
         (MODE_CAMERA, "Caméra"),
     ]
 
+    RECORDING_NONE = "none"
+    RECORDING_PENDING = "pending"
+    RECORDING_READY = "ready"
+    RECORDING_FAILED = "failed"
+    RECORDING_STATUS_CHOICES = [
+        (RECORDING_NONE, "Aucun"),
+        (RECORDING_PENDING, "En cours de traitement"),
+        (RECORDING_READY, "Disponible"),
+        (RECORDING_FAILED, "Échec"),
+    ]
+
     title = models.CharField(max_length=300, db_index=True)
     slug = models.SlugField(max_length=320, unique=True)
     description = models.TextField(blank=True)
@@ -39,6 +50,13 @@ class WebTVVideo(LiveStreamFields, Engageable):
     # URL since this field was required.
     video_url = models.URLField(max_length=500, blank=True)
     broadcast_mode = models.CharField(max_length=20, choices=BROADCAST_MODE_CHOICES, default=MODE_PLAYOUT)
+    # Celery task id driving the ffmpeg subprocess that pushes a playout video into the live
+    # pipeline (see apps.webtv.tasks.run_playout_stream) — lets end_live() revoke/terminate it
+    # cleanly instead of leaving an orphaned ffmpeg process. Empty for camera-mode broadcasts.
+    playout_task_id = models.CharField(max_length=255, blank=True)
+    recording_status = models.CharField(
+        max_length=20, choices=RECORDING_STATUS_CHOICES, default=RECORDING_NONE
+    )
     duration = models.CharField(max_length=10, blank=True)
     category = models.CharField(max_length=30, choices=CATEGORY_CHOICES, db_index=True)
     is_premier = models.BooleanField(default=False, db_index=True)

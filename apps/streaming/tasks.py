@@ -1,10 +1,20 @@
+import glob
+import logging
+import os
+
 from celery import shared_task
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 # Grace period after go_live before the poll is allowed to flip status back to "not live". Without
 # this, a broadcaster who takes a few seconds to actually start pushing (opening OBS, clicking
 # "Start Streaming") would see their status flicker live -> ended -> live within the first tick.
 GRACE_PERIOD_SECONDS = 45
+
+# Matches docs/*/mediamtx.yml's recordPath ("/recordings/%path/...") for the
+# "~^processed/live/(.+)$" pattern — %path resolves to "processed/live/<stream_key>".
+RECORDINGS_ROOT = "/recordings/processed/live"
 
 
 @shared_task(queue="default")
@@ -64,3 +74,55 @@ def sync_live_status() -> None:
         ):
             video.is_live = False
             video.save(update_fields=["is_live"])
+
+
+@shared_task(queue="default", bind=True, max_retries=1, default_retry_delay=15)
+def finalize_live_recording(self, app_label: str, model_name: str, object_id: int, stream_key: str) -> None:
+    """Uploads the MediaMTX recording of a just-ended live broadcast to Cloudinary and turns the
+    row that was live into a normal playable VOD (sets `video_url` + `recording_status`).
+
+    Triggered from `end_live()` for Web TV (camera mode only) and Emissions (always) — a playout
+    broadcast is already a saved video, nothing to record for that case. Relies entirely on
+    docs/*/mediamtx.yml's `record` config on the "processed/live/" path pattern to have actually
+    produced the file this reads; there is no other producer of `/recordings/...`.
+    """
+    import cloudinary.uploader
+    from django.apps import apps as django_apps
+
+    model = django_apps.get_model(app_label, model_name)
+    obj = model.objects.filter(pk=object_id).first()
+    if obj is None:
+        return  # deleted before we got to finalize it — nothing to do
+
+    pattern = os.path.join(RECORDINGS_ROOT, stream_key, "*.mp4")
+    matches = sorted(glob.glob(pattern))
+    if not matches:
+        # A fresh recording always has at least one open/flushed segment within a few seconds of
+        # the stream ending — one retry covers MediaMTX not having flushed it to disk yet. If it's
+        # still missing after that, recording never actually started (nothing left to wait for).
+        if self.request.retries < self.max_retries:
+            raise self.retry()
+        logger.error("finalize_live_recording: no recording file for stream_key=%s", stream_key)
+        obj.recording_status = model.RECORDING_FAILED
+        obj.save(update_fields=["recording_status"])
+        return
+
+    path = matches[-1]
+    try:
+        result = cloudinary.uploader.upload_large(
+            path, resource_type="video", folder=f"{app_label}/recordings"
+        )
+    except Exception:
+        logger.exception("finalize_live_recording: Cloudinary upload failed for %s", path)
+        obj.recording_status = model.RECORDING_FAILED
+        obj.save(update_fields=["recording_status"])
+        return
+
+    obj.video_url = result["secure_url"]
+    obj.recording_status = model.RECORDING_READY
+    obj.save(update_fields=["video_url", "recording_status"])
+
+    try:
+        os.remove(path)
+    except OSError:
+        logger.warning("finalize_live_recording: could not delete local file %s", path)

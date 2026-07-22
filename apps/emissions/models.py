@@ -15,6 +15,19 @@ class Emission(LiveStreamFields, Engageable):
         (STATUS_RECORDED, "Enregistré"),
     ]
 
+    # Distinct from `status == STATUS_RECORDED` (which just means "was live, isn't anymore") —
+    # this tracks whether a replayable video file was actually captured and uploaded.
+    RECORDING_NONE = "none"
+    RECORDING_PENDING = "pending"
+    RECORDING_READY = "ready"
+    RECORDING_FAILED = "failed"
+    RECORDING_STATUS_CHOICES = [
+        (RECORDING_NONE, "Aucun"),
+        (RECORDING_PENDING, "En cours de traitement"),
+        (RECORDING_READY, "Disponible"),
+        (RECORDING_FAILED, "Échec"),
+    ]
+
     title = models.CharField(max_length=200, db_index=True)
     slug = models.SlugField(max_length=220, unique=True)
     description = models.TextField(blank=True)
@@ -22,6 +35,12 @@ class Emission(LiveStreamFields, Engageable):
     # Default URLField max_length (200) truncates/rejects real-world Cloudinary/CDN URLs with
     # long public_ids or transformation strings — widened as a safety margin.
     stream_url = models.URLField(max_length=500, blank=True)
+    # Populated by apps.streaming.tasks.finalize_live_recording once a live broadcast's
+    # recording has been uploaded — lets a past emission be replayed as a normal VOD.
+    video_url = models.URLField(max_length=500, blank=True)
+    recording_status = models.CharField(
+        max_length=20, choices=RECORDING_STATUS_CHOICES, default=RECORDING_NONE
+    )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_SCHEDULED, db_index=True)
     scheduled_at = models.DateTimeField(null=True, blank=True, db_index=True)
     duration_minutes = models.PositiveSmallIntegerField(default=60)

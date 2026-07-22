@@ -68,6 +68,9 @@ services:
     restart: unless-stopped
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro
+      # Shared with `worker` below (read) — apps.streaming.tasks.finalize_live_recording reads
+      # the finished recording file straight off disk to upload it, no HTTP proxy needed.
+      - mediamtx_recordings:/recordings
     ports:
       # RTMP ingest — the ONE deliberate exception to this stack's "loopback only" rule.
       # Broadcasters (OBS etc.) must reach this directly from the public internet; the secret
@@ -131,7 +134,11 @@ services:
       context: ../..
       dockerfile: docs/docker-production/Dockerfile
     restart: unless-stopped
-    command: celery -A artdukivu worker -l info -Q default,high_priority -c 2
+    # -c 2 -> 3: a playout broadcast (apps.webtv.tasks.run_playout_stream) blocks a worker slot
+    # for the entire video's duration — with only 2 slots, one long playout could materially
+    # delay unrelated queued tasks (view-count increments, consumption heartbeats). This VPS has
+    # 4 vCPUs; the extra slot mostly waits on ffmpeg's own subprocess, not real Python CPU work.
+    command: celery -A artdukivu worker -l info -Q default,high_priority -c 3
     env_file: ../../.env
     environment:
       DJANGO_SETTINGS_MODULE: settings.production
@@ -139,6 +146,10 @@ services:
       DB_PORT: "5432"
       REDIS_URL: redis://redis:6379/0
       ELASTICSEARCH_URL: http://elasticsearch:9200
+    volumes:
+      # Read-only from this side would be ideal, but finalize_live_recording deletes the file
+      # after a successful upload — needs write access to do that cleanup itself.
+      - mediamtx_recordings:/recordings
     depends_on:
       api:
         condition: service_healthy
@@ -178,3 +189,4 @@ volumes:
   pg_data:
   redis_data:
   es_data:
+  mediamtx_recordings:
