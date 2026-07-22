@@ -476,11 +476,21 @@ nécessaire).
 ### `broadcast_mode` : direct fichier vs direct caméra
 
 `broadcast_mode` ∈ `playout | camera`, présent sur liste et détail :
-- **`playout`** (par défaut) : une vidéo pré-enregistrée, `video_url` obligatoire.
+- **`playout`** (par défaut) : une vidéo pré-enregistrée, `video_url` obligatoire. **Depuis cette
+  session, `go_live` sur une vidéo playout démarre un vrai direct côté serveur** — un worker
+  Celery pousse lui-même le fichier `video_url` dans MediaMTX (même chemin RTMP, mêmes
+  `playback_hls_url`/chat/`is_live` qu'un direct caméra réel). Rien à configurer côté OBS pour ce
+  cas. `is_live` repasse à `false` **tout seul** dès que la vidéo atteint sa fin — pas besoin
+  d'appeler `end_live` sauf pour arrêter la diffusion avant la fin. Le panneau admin doit donc
+  re-poller/écouter le WebSocket pour détecter cette fin automatique, exactement comme pour un
+  direct caméra qui se termine.
 - **`camera`** : un direct caméra pur (pas de fichier existant) — `video_url` **facultatif**,
   la lecture se fait via `playback_hls_url` une fois `go_live` appelé, exactement comme les
   autres surfaces live. Ne plus envoyer d'URL factice/placeholder pour ce cas — laisser
-  `video_url` vide.
+  `video_url` vide. **Une fois `end_live` appelé (ou la déconnexion détectée automatiquement),
+  le direct est désormais enregistré automatiquement** — voir `docs/LIVE_STREAMING.md` section
+  "Enregistrement automatique des directs" pour le détail (`recording_status`, remplissage
+  différé de `video_url`).
 
 ## Émissions live
 

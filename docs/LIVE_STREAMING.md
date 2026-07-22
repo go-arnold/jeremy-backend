@@ -12,12 +12,13 @@ qui construit l'intégration live côté `frontend_admin` et `frontend_client`.
 2. [Concepts clés](#concepts-clés)
 3. [Référence des endpoints — les 4 surfaces live](#référence-des-endpoints--les-4-surfaces-live)
 4. [Détection du statut live (interne, rien à appeler depuis un frontend)](#détection-du-statut-live-interne-rien-à-appeler-depuis-un-frontend)
-5. [Temps réel : WebSocket (présence + chat)](#temps-réel-websocket-présence--chat)
-6. [Engagement sur le contenu live](#engagement-sur-le-contenu-live)
-7. [Intégration côté admin (frontend_admin)](#intégration-côté-admin-frontend_admin)
-8. [Intégration côté client (frontend_client)](#intégration-côté-client-frontend_client)
-9. [Gestion des erreurs et cas limites](#gestion-des-erreurs-et-cas-limites)
-10. [Checklist de test de bout en bout](#checklist-de-test-de-bout-en-bout)
+5. [Enregistrement automatique des directs](#enregistrement-automatique-des-directs)
+6. [Temps réel : WebSocket (présence + chat)](#temps-réel-websocket-présence--chat)
+7. [Engagement sur le contenu live](#engagement-sur-le-contenu-live)
+8. [Intégration côté admin (frontend_admin)](#intégration-côté-admin-frontend_admin)
+9. [Intégration côté client (frontend_client)](#intégration-côté-client-frontend_client)
+10. [Gestion des erreurs et cas limites](#gestion-des-erreurs-et-cas-limites)
+11. [Checklist de test de bout en bout](#checklist-de-test-de-bout-en-bout)
 
 ---
 
@@ -91,6 +92,7 @@ par l'opérateur) sur Web TV.
 | `room_type` | Identifie le salon WebSocket : `radio`, `emission`, `webtv`, `live_music`. |
 | `room_id` | L'identifiant de la ressource dans ce salon (voir tableau plus bas — radio utilise un id fixe `"live"`, les autres utilisent le `pk` numérique de la ressource). |
 | Statut live | `Emission.status` / `RadioProgram.status` / `MusicLiveSession.status` valent `"live"` quand en direct ; `WebTVVideo` utilise un booléen `is_live`. |
+| `recording_status` | `none \| pending \| ready \| failed` — présent sur les 4 surfaces, voir section "Enregistrement automatique des directs". |
 
 **Pas d'idempotence — c'est volontaire** : rappeler `go_live` sur une ressource, même déjà en
 direct, génère **toujours** une nouvelle `stream_key` et réinitialise `live_started_at`.
@@ -172,6 +174,39 @@ l'API MediaMTX (`GET /v3/paths/list`) et bascule automatiquement le statut de la
 correspondante. Mentionné ici uniquement pour que l'équipe frontend comprenne pourquoi
 `status`/`is_live` se met à jour tout seul, avec un délai de quelques secondes, sans qu'aucun
 appel explicite ne soit nécessaire de leur côté.
+
+## Enregistrement automatique des directs
+
+Depuis cette session, un direct **réel** (caméra/micro, pas playout) est automatiquement
+enregistré côté serveur et transformé en contenu rejouable, sans aucune action admin après coup.
+
+**Surfaces concernées** : Web TV (mode `camera` uniquement — le mode `playout` est déjà une vidéo
+existante, rien à enregistrer), Émissions, Radio, Live Music. **Non concerné** : Web TV en mode
+`playout`.
+
+**Champ `recording_status`** (présent sur les 4 surfaces, liste et détail) :
+
+| Valeur | Signification |
+|---|---|
+| `none` | Rien à enregistrer pour l'instant (contenu jamais passé en direct, ou vidéo playout). |
+| `pending` | Le direct vient de se terminer, l'enregistrement est en cours de traitement côté serveur (upload vers Cloudinary). |
+| `ready` | Enregistrement disponible — `video_url` (Web TV/Émissions) ou `audio_url` (Radio/Live Music) pointe vers un fichier lisible. |
+| `failed` | L'enregistrement n'a pas pu être finalisé (rare) — le direct lui-même s'est bien déroulé, seule la sauvegarde a échoué. |
+
+**Champ contenant le résultat** : `video_url` pour Web TV et Émissions, `audio_url` pour Radio et
+Live Music — ces noms diffèrent car chaque modèle avait déjà son propre champ avant l'ajout de
+cette fonctionnalité. Vide tant que `recording_status !== "ready"`.
+
+**Délai** : `recording_status` passe à `pending` dès que le direct se termine (appel `end_live`
+explicite, ou détection automatique de déconnexion). Le passage à `ready` prend généralement
+quelques secondes à ~1-2 minutes selon la durée de l'enregistrement à uploader — **le frontend
+doit re-poller** `GET /{préfixe}/{id}/` (ou attendre un rafraîchissement normal de la page) plutôt
+que de considérer l'absence immédiate de `video_url`/`audio_url` comme un échec.
+
+**Ce qui n'est PAS géré** : un direct de plus de 12h (segmentation non gérée), le montage/édition
+de l'enregistrement, la conservation des directs Radio/Live Music au-delà de ce mécanisme simple
+(pas de bouclage/relecture automatique programmée — c'est un fichier normal comme n'importe quel
+autre contenu VOD une fois `ready`).
 
 ## Temps réel : WebSocket (présence + chat)
 
