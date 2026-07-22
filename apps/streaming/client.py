@@ -1,5 +1,9 @@
+import logging
+
 import requests
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 def build_playback_url(stream_key: str) -> str:
@@ -27,9 +31,21 @@ def kick_publisher(stream_key: str) -> None:
     start_live_input)."""
     for path in (f"live/{stream_key}", f"processed/live/{stream_key}"):
         try:
-            requests.post(f"{settings.MEDIAMTX_API_URL}/v3/paths/kick/{path}", timeout=5)
+            response = requests.post(f"{settings.MEDIAMTX_API_URL}/v3/paths/kick/{path}", timeout=5)
+            # Confirmed live: MediaMTX's API rejected this with a 401 for weeks without a single
+            # visible error anywhere, because nothing checked the response — the broadcaster kept
+            # running for 9+ minutes past `end_live` while our own DB already said "not live".
+            # Still never raises (this is best-effort — there may genuinely be no active
+            # publisher, a 404 here is normal), just makes an actual failure visible in logs.
+            if response.status_code >= 400 and response.status_code != 404:
+                logger.warning(
+                    "kick_publisher: MediaMTX rejected kick for path=%s status=%s body=%s",
+                    path,
+                    response.status_code,
+                    response.text[:200],
+                )
         except requests.RequestException:
-            pass
+            logger.warning("kick_publisher: request failed for path=%s", path)
 
 
 def list_ready_stream_keys():
