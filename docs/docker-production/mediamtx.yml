@@ -12,7 +12,12 @@ hlsAddress: :8888
 # interacts badly with a plain reverse-proxy buffer — one of the two contributors (alongside
 # stream_key reuse, fixed in apps/streaming/services.py) to the "stream repeats itself" bug.
 hlsVariant: mpegts
-hlsSegmentCount: 5
+# 5x2s = only 10s of buffer — too thin: any brief ffmpeg/network hiccup makes the player catch
+# up to the live edge and stall waiting for the next segment (observed live: periodic loading
+# spinner after a few minutes, recovers on its own). 8x2s = 16s gives real cushion against
+# transient slowdowns at the cost of a few extra seconds of live latency — a good trade for a
+# radio/webtv live stream, where sub-5s latency isn't the priority.
+hlsSegmentCount: 8
 hlsSegmentDuration: 2s
 
 # Internal-only (never published to the host) — used by apps/streaming/client.py's
