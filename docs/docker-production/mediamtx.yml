@@ -32,14 +32,17 @@ apiAddress: :9997
 paths:
   # Radio/Emissions/LiveMusic — audio-only. Strips video (-vn) and transcodes to AAC
   # 128kbps/44.1kHz: solid audio quality without the mobile-data cost of carrying video.
+  # $MTX_PATH is the FULL matched path ("live/audio_<key>"), not just the captured key — the
+  # `${MTX_PATH#live/}` shell expansion strips the "live/" prefix so the output lands at
+  # "processed/<key>", not "processed/live/<key>" (which playback_hls_url never looks for).
   "~^live/audio_(.+)$":
-    runOnReady: ffmpeg -i rtmp://localhost:1935/$MTX_PATH -vn -c:a aac -b:a 128k -ar 44100 -f flv rtmp://localhost:1935/processed/$MTX_PATH
+    runOnReady: ffmpeg -i rtmp://localhost:1935/$MTX_PATH -vn -c:a aac -b:a 128k -ar 44100 -f flv rtmp://localhost:1935/processed/${MTX_PATH#live/}
     runOnReadyRestart: yes
 
   # WebTV — video. Re-encodes to a controlled 720p/1.5Mbps ceiling (down from whatever
   # bitrate/resolution OBS pushes raw) plus the same AAC audio track.
   "~^live/video_(.+)$":
-    runOnReady: ffmpeg -i rtmp://localhost:1935/$MTX_PATH -c:v libx264 -preset veryfast -b:v 1500k -maxrate 1500k -bufsize 3000k -vf scale=-2:720 -c:a aac -b:a 128k -f flv rtmp://localhost:1935/processed/$MTX_PATH
+    runOnReady: ffmpeg -i rtmp://localhost:1935/$MTX_PATH -c:v libx264 -preset veryfast -b:v 1500k -maxrate 1500k -bufsize 3000k -vf scale=-2:720 -c:a aac -b:a 128k -f flv rtmp://localhost:1935/processed/${MTX_PATH#live/}
     runOnReadyRestart: yes
 
   # Transcoded output landing path — republished here by the ffmpeg hooks above, this is what
