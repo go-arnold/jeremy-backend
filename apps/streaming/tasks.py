@@ -1,11 +1,29 @@
 import glob
 import logging
 import os
+import time
 
 from celery import shared_task
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+# How long to watch a just-found recording file for a stable (unchanging) size before trusting
+# it's actually finished being written.
+_STABILITY_CHECKS = 4
+_STABILITY_INTERVAL_SECONDS = 1
+
+
+def _is_file_stable(path: str) -> bool:
+    size = os.path.getsize(path)
+    for _ in range(_STABILITY_CHECKS):
+        time.sleep(_STABILITY_INTERVAL_SECONDS)
+        new_size = os.path.getsize(path)
+        if new_size != size:
+            return False
+        size = new_size
+    return True
+
 
 # Grace period after go_live before the poll is allowed to flip status back to "not live". Without
 # this, a broadcaster who takes a few seconds to actually start pushing (opening OBS, clicking
@@ -76,7 +94,7 @@ def sync_live_status() -> None:
             video.save(update_fields=["is_live"])
 
 
-@shared_task(queue="default", bind=True, max_retries=1, default_retry_delay=15)
+@shared_task(queue="default", bind=True, max_retries=2, default_retry_delay=15)
 def finalize_live_recording(
     self,
     app_label: str,
@@ -119,6 +137,18 @@ def finalize_live_recording(
         return
 
     path = matches[-1]
+    if not _is_file_stable(path):
+        # MediaMTX hadn't finished flushing/closing this recording segment yet — uploading a
+        # still-growing file produced a real Content-Range mismatch that Cloudinary rejected
+        # ("All parts except EOF-chunk must be larger than 5mb", confirmed live). Retry the whole
+        # task rather than upload a partial file.
+        if self.request.retries < self.max_retries:
+            raise self.retry()
+        logger.error("finalize_live_recording: recording file still growing for stream_key=%s", stream_key)
+        obj.recording_status = model.RECORDING_FAILED
+        obj.save(update_fields=["recording_status"])
+        return
+
     try:
         result = cloudinary.uploader.upload_large(
             path, resource_type="video", folder=f"{app_label}/recordings"
