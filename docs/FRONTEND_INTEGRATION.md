@@ -441,7 +441,7 @@ audio : `title`, `duration` (chaîne, ex. `"42:10"`), `description` (utilisé co
   "end_time": "14:00:00",
   "status": "live",
   "stream_url": "",
-  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/audio_<clé>/index.m3u8",
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/live/audio_<clé>/index.m3u8",
   "listener_count": 42
 }
 ```
@@ -518,7 +518,7 @@ grille de programmes + son propre chat.
   "status": "live",
   "cover_url": "https://res.cloudinary.com/.../cover.jpg",
   "scheduled_at": "2026-07-11T18:00:00Z",
-  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/audio_<clé>/index.m3u8",
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/live/audio_<clé>/index.m3u8",
   "online_followers": 128,
   "live_started_at": "2026-07-11T18:00:00Z"
 }
@@ -848,7 +848,7 @@ un champ de lecture une fois en direct : `RadioProgram`, `Emission`, `WebTVVideo
 
 ```json
 {
-  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/<clé>/index.m3u8"
+  "playback_hls_url": "https://art-du-kivu-api.kelor.tech/live-hls/processed/live/<clé>/index.m3u8"
 }
 ```
 

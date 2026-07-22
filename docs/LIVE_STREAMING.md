@@ -49,7 +49,7 @@ qui construit l'intégration live côté `frontend_admin` et `frontend_client`.
   ffmpeg le retraite systématiquement vers un second chemin (`processed/<clé>`), qui est le seul
   jamais exposé en lecture. Deux profils selon le type de surface (voir juste après) : audio-only
   (vidéo supprimée) pour Radio/Émissions/Live Music, vidéo plafonnée à 720p/1.5Mbps pour Web TV.
-- **Lecture** : servie sous `/live-hls/processed/<clé>/index.m3u8` sur le même domaine que
+- **Lecture** : servie sous `/live-hls/processed/live/<clé>/index.m3u8` sur le même domaine que
   l'API (HTTPS, pas de port séparé côté client).
 
 ### Audio seul vs vidéo : qui diffuse quoi
@@ -87,7 +87,7 @@ par l'opérateur) sur Web TV.
 |---|---|
 | `stream_key` | Identifiant aléatoire (32 caractères hex), préfixé par le profil (`audio_...` ou `video_...`), **régénéré à chaque appel `go_live`** — sert à la fois de nom de chemin RTMP et de secret de diffusion (le "Stream key" à donner à OBS). Jamais renvoyé par les endpoints publics de lecture, uniquement par `go_live` (réservé admin). |
 | `rtmp_server_url` | Constante (ne change jamais), ex. `rtmp://art-du-kivu-api.kelor.tech:1935/live` — le champ "Serveur" d'OBS. |
-| `playback_hls_url` | URL HLS publique, ex. `https://art-du-kivu-api.kelor.tech/live-hls/processed/<clé>/index.m3u8` — vide tant que la ressource n'est pas en direct. |
+| `playback_hls_url` | URL HLS publique, ex. `https://art-du-kivu-api.kelor.tech/live-hls/processed/live/<clé>/index.m3u8` — vide tant que la ressource n'est pas en direct. |
 | `room_type` | Identifie le salon WebSocket : `radio`, `emission`, `webtv`, `live_music`. |
 | `room_id` | L'identifiant de la ressource dans ce salon (voir tableau plus bas — radio utilise un id fixe `"live"`, les autres utilisent le `pk` numérique de la ressource). |
 | Statut live | `Emission.status` / `RadioProgram.status` / `MusicLiveSession.status` valent `"live"` quand en direct ; `WebTVVideo` utilise un booléen `is_live`. |

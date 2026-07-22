@@ -3,10 +3,17 @@ from django.conf import settings
 
 
 def build_playback_url(stream_key: str) -> str:
-    # Served from "processed/<key>", not "live/<key>" — the raw ingest path is transcode-input
-    # only (see mediamtx.yml's runOnReady ffmpeg hooks); viewers always get the re-encoded,
-    # quality/bitrate-controlled copy ffmpeg republishes under "processed/".
-    return f"{settings.MEDIAMTX_HLS_BASE_URL}/processed/{stream_key}/index.m3u8"
+    # Served from "processed/live/<key>", not "live/<key>" — the raw ingest path is
+    # transcode-input only (see mediamtx.yml's runOnReady ffmpeg hooks); viewers always get the
+    # re-encoded, quality/bitrate-controlled copy ffmpeg republishes under "processed/".
+    #
+    # The extra "live/" segment is not a typo: MediaMTX's $MTX_PATH hook variable is the FULL
+    # matched path ("live/<key>"), not just the captured key, and shell parameter expansion
+    # (${MTX_PATH#live/}) to strip it turned out not to survive however MediaMTX actually invokes
+    # runOnReady (confirmed live: the processed/ path stopped being created at all once that
+    # expansion was introduced) — so the plain, proven-working `$MTX_PATH` substitution is used
+    # in mediamtx.yml, and this URL matches the path it naturally produces instead of fighting it.
+    return f"{settings.MEDIAMTX_HLS_BASE_URL}/processed/live/{stream_key}/index.m3u8"
 
 
 def kick_publisher(stream_key: str) -> None:
@@ -14,12 +21,13 @@ def kick_publisher(stream_key: str) -> None:
     raises: there may be no active publisher (nothing to kick), or the API may be briefly
     unreachable — either way `end_live` must still succeed on our own DB state.
 
-    Kicks both the raw ingest path and its ffmpeg-republished "processed" copy, so ending a
-    broadcast fully tears down both instead of leaving "processed/<key>" registered after its
-    source vanishes (a contributor to the "stale stream repeats" bug — see start_live_input)."""
-    for prefix in ("live", "processed"):
+    Kicks both the raw ingest path and its ffmpeg-republished "processed/live/<key>" copy, so
+    ending a broadcast fully tears down both instead of leaving the processed path registered
+    after its source vanishes (a contributor to the "stale stream repeats" bug — see
+    start_live_input)."""
+    for path in (f"live/{stream_key}", f"processed/live/{stream_key}"):
         try:
-            requests.post(f"{settings.MEDIAMTX_API_URL}/v3/paths/kick/{prefix}/{stream_key}", timeout=5)
+            requests.post(f"{settings.MEDIAMTX_API_URL}/v3/paths/kick/{path}", timeout=5)
         except requests.RequestException:
             pass
 
