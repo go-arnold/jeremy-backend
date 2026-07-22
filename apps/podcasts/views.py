@@ -170,6 +170,8 @@ class PodcastEpisodeViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelVi
 
     def get_queryset(self):
         qs = PodcastEpisode.objects.select_related("series")
+        if not (self.request.user and self.request.user.is_staff):
+            qs = qs.filter(status=PodcastEpisode.STATUS_PUBLISHED)
         category = self.request.query_params.get("category")
         if category:
             qs = qs.filter(series__category=category)

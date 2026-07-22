@@ -1,3 +1,4 @@
+from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from drf_spectacular.utils import OpenApiExample, extend_schema, extend_schema_view
@@ -130,11 +131,42 @@ class ArticleViewSet(UploadThrottleMixin, ModelViewSet):
     def perform_destroy(self, instance):
         services.delete_article(instance)
 
-    @method_decorator(cache_page(60 * 60))
-    @action(detail=False, methods=["get"])
+    @extend_schema(
+        methods=["POST"],
+        examples=[
+            OpenApiExample(
+                "Nouvelle catégorie", value={"name": "Cinéma", "color": "secondary"}, request_only=True
+            )
+        ],
+    )
+    @action(detail=False, methods=["get", "post"])
     def categories(self, request):
+        # IsAdminOrReadOnly (class-level permission_classes) already gates POST to staff —
+        # GET stays open to everyone, same pattern as ArtistViewSet.releases/videos/gallery.
+        if request.method == "POST":
+            ser = CategorySerializer(data=request.data)
+            ser.is_valid(raise_exception=True)
+            category = Category.objects.create(**ser.validated_data)
+            return Response(CategorySerializer(category).data, status=status.HTTP_201_CREATED)
         cats = Category.objects.all()
         return Response(CategorySerializer(cats, many=True).data)
+
+    @extend_schema(
+        methods=["PATCH"],
+        examples=[OpenApiExample("Renommer", value={"name": "Cinéma & Audiovisuel"}, request_only=True)],
+    )
+    @action(detail=False, methods=["patch", "delete"], url_path=r"categories/(?P<category_id>\d+)")
+    def category_detail(self, request, category_id=None):
+        category = get_object_or_404(Category, pk=category_id)
+        if request.method == "DELETE":
+            category.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        ser = CategorySerializer(category, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        for attr, value in ser.validated_data.items():
+            setattr(category, attr, value)
+        category.save()
+        return Response(CategorySerializer(category).data)
 
     @action(detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated])
     def like(self, request, slug=None):

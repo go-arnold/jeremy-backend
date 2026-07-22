@@ -2,10 +2,11 @@ from cloudinary.models import CloudinaryField
 from django.conf import settings
 from django.db import models
 
+from apps.engagement.models import Engageable
 from apps.streaming.fields import LiveStreamFields
 
 
-class RadioProgram(LiveStreamFields):
+class RadioProgram(LiveStreamFields, Engageable):
     STATUS_LIVE = "live"
     STATUS_UPCOMING = "upcoming"
     STATUS_ENDED = "ended"

@@ -12,6 +12,7 @@ class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["id", "name", "slug", "color"]
+        extra_kwargs = {"slug": {"required": False}}
 
 
 class TagSerializer(serializers.ModelSerializer):

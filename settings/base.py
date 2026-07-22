@@ -287,6 +287,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.articles.tasks.publish_scheduled_articles",
         "schedule": 300,
     },
+    "publish-scheduled-episodes": {
+        "task": "apps.podcasts.tasks.publish_scheduled_episodes",
+        "schedule": 300,
+    },
 }
 
 # ── DRF ───────────────────────────────────────────────────────────────────────

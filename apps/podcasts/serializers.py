@@ -111,6 +111,7 @@ class EpisodeListSerializer(serializers.ModelSerializer):
             "season_number",
             "play_count",
             "is_featured",
+            "status",
             "published_at",
             "series_title",
             "series_slug",
@@ -152,6 +153,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "transcript",
             "play_count",
             "is_featured",
+            "status",
             "published_at",
             "series",
             "like_count",
@@ -204,9 +206,10 @@ class EpisodeWriteSerializer(serializers.ModelSerializer):
             "guests",
             "transcript",
             "is_featured",
+            "status",
             "published_at",
         ]
-        extra_kwargs = {"slug": {"required": False}}
+        extra_kwargs = {"slug": {"required": False}, "status": {"required": False}}
 
     def validate_audio_url(self, value):
         if value:

@@ -10,6 +10,19 @@ def async_increment_play(episode_id: int) -> None:
 
 
 @shared_task(queue="default")
+def publish_scheduled_episodes() -> None:
+    """Same pattern as apps.articles.tasks.publish_scheduled_articles: a draft episode with a
+    past-due published_at flips to published automatically."""
+    from django.utils import timezone
+
+    from .models import PodcastEpisode
+
+    PodcastEpisode.objects.filter(
+        status=PodcastEpisode.STATUS_DRAFT, published_at__lte=timezone.now()
+    ).update(status=PodcastEpisode.STATUS_PUBLISHED)
+
+
+@shared_task(queue="default")
 def update_series_episode_counts() -> None:
     from django.db.models import Count
 

@@ -46,7 +46,7 @@ from .serializers import (
 )
 class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
     pagination_class = StandardPagination
-    http_method_names = ["get", "post", "delete"]
+    http_method_names = ["get", "post", "patch", "delete"]
 
     def get_queryset(self):
         qs = CommunityPost.objects.select_related("author")
@@ -68,7 +68,7 @@ class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
     def get_permissions(self):
         if self.action == "create":
             return [permissions.IsAuthenticated()]
-        if self.action == "destroy":
+        if self.action in ("partial_update", "destroy"):
             return [IsOwnerOrAdmin()]
         # Everything else (list/retrieve, and the engagement actions mounted by
         # EngagementActionsMixin — like/comments/share/save/submit_talent) defers to
@@ -77,7 +77,7 @@ class CommunityPostViewSet(EngagementActionsMixin, ModelViewSet):
         return super().get_permissions()
 
     def get_serializer_class(self):
-        if self.action == "create":
+        if self.action in ("create", "partial_update"):
             return CommunityPostWriteSerializer
         return CommunityPostSerializer
 

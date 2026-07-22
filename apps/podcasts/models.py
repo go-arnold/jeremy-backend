@@ -47,6 +47,13 @@ class PodcastSeries(models.Model):
 
 
 class PodcastEpisode(Engageable):
+    STATUS_DRAFT = "draft"
+    STATUS_PUBLISHED = "published"
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_PUBLISHED, "Published"),
+    ]
+
     series = models.ForeignKey(PodcastSeries, on_delete=models.CASCADE, related_name="episodes")
     title = models.CharField(max_length=300, db_index=True)
     slug = models.SlugField(max_length=320, unique=True)
@@ -63,6 +70,11 @@ class PodcastEpisode(Engageable):
     transcript = models.TextField(blank=True)
     play_count = models.PositiveIntegerField(default=0)
     is_featured = models.BooleanField(default=False, db_index=True)
+    # Default "published" preserves existing rows' current (already-public) behavior — only
+    # newly-created draft episodes are held back. A draft with a past published_at auto-flips
+    # to published via apps.podcasts.tasks.publish_scheduled_episodes (same pattern as
+    # apps.articles.tasks.publish_scheduled_articles).
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PUBLISHED, db_index=True)
     published_at = models.DateTimeField(db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

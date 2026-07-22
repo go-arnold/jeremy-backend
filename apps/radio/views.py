@@ -8,6 +8,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.engagement.mixins import EngagementActionsMixin
 from apps.realtime import presence
 from core.pagination import SmallPagination
 from core.permissions import IsAdminOrReadOnly, IsOwnerOrAdmin
@@ -49,7 +50,7 @@ RADIO_ROOM_ID = "live"
         ]
     )
 )
-class RadioProgramViewSet(UploadThrottleMixin, ModelViewSet):
+class RadioProgramViewSet(UploadThrottleMixin, EngagementActionsMixin, ModelViewSet):
     queryset = RadioProgram.objects.all()
     permission_classes = [IsAdminOrReadOnly]
     lookup_field = "id"
