@@ -22,12 +22,31 @@ class MusicLiveSession(LiveStreamFields, Engageable):
         (STATUS_ENDED, "Terminé"),
     ]
 
+    # Distinct from `status == STATUS_ENDED` (just means "was live, isn't anymore") — this tracks
+    # whether a replayable audio file was actually captured and uploaded.
+    RECORDING_NONE = "none"
+    RECORDING_PENDING = "pending"
+    RECORDING_READY = "ready"
+    RECORDING_FAILED = "failed"
+    RECORDING_STATUS_CHOICES = [
+        (RECORDING_NONE, "Aucun"),
+        (RECORDING_PENDING, "En cours de traitement"),
+        (RECORDING_READY, "Disponible"),
+        (RECORDING_FAILED, "Échec"),
+    ]
+
     title = models.CharField(max_length=200, db_index=True)
     slug = models.SlugField(max_length=220, unique=True)
     cover = CloudinaryField("cover", blank=True, null=True)
     artists = models.ManyToManyField("artists.Artist", blank=True, related_name="live_music_sessions")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_SCHEDULED, db_index=True)
     scheduled_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    # Populated by apps.streaming.tasks.finalize_live_recording once a live broadcast's
+    # recording has been uploaded — lets a past session be replayed as a normal VOD.
+    audio_url = models.URLField(max_length=500, blank=True)
+    recording_status = models.CharField(
+        max_length=20, choices=RECORDING_STATUS_CHOICES, default=RECORDING_NONE
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

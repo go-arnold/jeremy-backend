@@ -25,12 +25,15 @@ class MusicLiveSessionSerializer(serializers.ModelSerializer):
             "status",
             "scheduled_at",
             "playback_hls_url",
+            "audio_url",
+            "recording_status",
             "online_followers",
             "live_started_at",
             "like_count",
             "comment_count",
             "created_at",
         ]
+        extra_kwargs = {"recording_status": {"read_only": True}, "audio_url": {"read_only": True}}
 
     def get_artist_names(self, obj):
         return [a.name for a in obj.artists.all()]

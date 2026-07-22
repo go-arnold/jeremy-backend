@@ -51,11 +51,20 @@ def start_live(session: MusicLiveSession) -> MusicLiveSession:
 
 @transaction.atomic
 def end_live(session: MusicLiveSession) -> MusicLiveSession:
-    streaming_services.stop_live_input(session.stream_key)
+    stream_key = session.stream_key
+    streaming_services.stop_live_input(stream_key)
     session.status = MusicLiveSession.STATUS_ENDED
     session.stream_key = ""
+    session.recording_status = MusicLiveSession.RECORDING_PENDING
     session.save()
     cache.delete(CURRENT_KEY)
+
+    from apps.streaming.tasks import finalize_live_recording
+
+    finalize_live_recording.delay(
+        "live_music", "MusicLiveSession", session.pk, stream_key, url_field="audio_url"
+    )
+
     return session
 
 

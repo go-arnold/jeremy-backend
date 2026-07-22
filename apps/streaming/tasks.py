@@ -77,14 +77,25 @@ def sync_live_status() -> None:
 
 
 @shared_task(queue="default", bind=True, max_retries=1, default_retry_delay=15)
-def finalize_live_recording(self, app_label: str, model_name: str, object_id: int, stream_key: str) -> None:
+def finalize_live_recording(
+    self,
+    app_label: str,
+    model_name: str,
+    object_id: int,
+    stream_key: str,
+    url_field: str = "video_url",
+) -> None:
     """Uploads the MediaMTX recording of a just-ended live broadcast to Cloudinary and turns the
-    row that was live into a normal playable VOD (sets `video_url` + `recording_status`).
+    row that was live into a normal playable VOD (sets `<url_field>` + `recording_status`).
 
-    Triggered from `end_live()` for Web TV (camera mode only) and Emissions (always) — a playout
-    broadcast is already a saved video, nothing to record for that case. Relies entirely on
-    docs/*/mediamtx.yml's `record` config on the "processed/live/" path pattern to have actually
-    produced the file this reads; there is no other producer of `/recordings/...`.
+    `url_field` differs per app because each model already had its own naming before this task
+    existed: `video_url` for Web TV/Emissions, `audio_url` for Radio/Live Music.
+
+    Triggered from `end_live()` for Web TV (camera mode only) and Emissions/Radio/Live Music
+    (always, since those have no playout concept) — a playout broadcast is already a saved video,
+    nothing to record for that case. Relies entirely on docs/*/mediamtx.yml's `record` config on
+    the "processed/live/" path pattern to have actually produced the file this reads; there is no
+    other producer of `/recordings/...`.
     """
     import cloudinary.uploader
     from django.apps import apps as django_apps
@@ -118,9 +129,9 @@ def finalize_live_recording(self, app_label: str, model_name: str, object_id: in
         obj.save(update_fields=["recording_status"])
         return
 
-    obj.video_url = result["secure_url"]
+    setattr(obj, url_field, result["secure_url"])
     obj.recording_status = model.RECORDING_READY
-    obj.save(update_fields=["video_url", "recording_status"])
+    obj.save(update_fields=[url_field, "recording_status"])
 
     try:
         os.remove(path)

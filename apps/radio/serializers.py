@@ -25,8 +25,11 @@ class RadioProgramSerializer(serializers.ModelSerializer):
             "status",
             "stream_url",
             "playback_hls_url",
+            "audio_url",
+            "recording_status",
             "listener_count",
         ]
+        extra_kwargs = {"recording_status": {"read_only": True}, "audio_url": {"read_only": True}}
 
     def get_cover_url(self, obj):
         return resolve_cloudinary_url(obj.cover, "image")

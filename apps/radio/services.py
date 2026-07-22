@@ -21,11 +21,18 @@ def start_live(program: RadioProgram) -> RadioProgram:
 
 @transaction.atomic
 def end_live(program: RadioProgram) -> RadioProgram:
-    streaming_services.stop_live_input(program.stream_key)
+    stream_key = program.stream_key
+    streaming_services.stop_live_input(stream_key)
     program.status = RadioProgram.STATUS_ENDED
     program.stream_key = ""
+    program.recording_status = RadioProgram.RECORDING_PENDING
     program.save()
     cache.delete(CURRENT_KEY)
+
+    from apps.streaming.tasks import finalize_live_recording
+
+    finalize_live_recording.delay("radio", "RadioProgram", program.pk, stream_key, url_field="audio_url")
+
     return program
 
 
