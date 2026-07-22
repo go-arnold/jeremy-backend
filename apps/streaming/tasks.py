@@ -50,19 +50,29 @@ def sync_live_status() -> None:
     if ready_keys is None:
         return  # MediaMTX API unreachable this tick — try again next tick, don't guess.
 
+    from apps.emissions import services as emissions_services
     from apps.emissions.models import Emission
+    from apps.live_music import services as live_music_services
     from apps.live_music.models import MusicLiveSession
+    from apps.radio import services as radio_services
     from apps.radio.models import RadioProgram
     from apps.webtv.models import WebTVVideo
 
     cutoff = timezone.now() - timezone.timedelta(seconds=GRACE_PERIOD_SECONDS)
 
+    # Confirmed live: this used to flip `status` directly instead of calling each app's own
+    # end_live() — that never cleared stream_key or triggered finalize_live_recording, so a
+    # broadcast that disconnected naturally (rather than via an explicit end_live call) silently
+    # skipped recording entirely, and a later explicit end_live() call became a no-op against the
+    # already-"ended" status (see the idempotency guards in each app's end_live()). Delegating to
+    # the real end_live() makes this poll just another trigger for the exact same teardown path,
+    # whichever fires first.
     status_models = [
-        (Emission, Emission.STATUS_LIVE, Emission.STATUS_RECORDED),
-        (RadioProgram, RadioProgram.STATUS_LIVE, RadioProgram.STATUS_ENDED),
-        (MusicLiveSession, MusicLiveSession.STATUS_LIVE, MusicLiveSession.STATUS_ENDED),
+        (Emission, Emission.STATUS_LIVE, emissions_services.end_live),
+        (RadioProgram, RadioProgram.STATUS_LIVE, radio_services.end_live),
+        (MusicLiveSession, MusicLiveSession.STATUS_LIVE, live_music_services.end_live),
     ]
-    for model, live_value, ended_value in status_models:
+    for model, live_value, end_live in status_models:
         for obj in model.objects.exclude(stream_key="").only("pk", "stream_key", "status", "live_started_at"):
             is_ready = obj.stream_key in ready_keys
             if is_ready and obj.status != live_value:
@@ -74,11 +84,12 @@ def sync_live_status() -> None:
                 and obj.live_started_at is not None
                 and obj.live_started_at < cutoff
             ):
-                obj.status = ended_value
-                obj.save(update_fields=["status"])
+                end_live(obj)
+
+    from apps.webtv import services as webtv_services
 
     for video in WebTVVideo.objects.exclude(stream_key="").only(
-        "pk", "stream_key", "is_live", "live_started_at"
+        "pk", "stream_key", "is_live", "live_started_at", "broadcast_mode", "playout_task_id"
     ):
         is_ready = video.stream_key in ready_keys
         if is_ready and not video.is_live:
@@ -90,8 +101,7 @@ def sync_live_status() -> None:
             and video.live_started_at is not None
             and video.live_started_at < cutoff
         ):
-            video.is_live = False
-            video.save(update_fields=["is_live"])
+            webtv_services.end_live(video)
 
 
 @shared_task(queue="default", bind=True, max_retries=5, default_retry_delay=15)
