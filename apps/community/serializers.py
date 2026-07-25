@@ -4,7 +4,7 @@ from apps.engagement.services import engagement_counts
 from apps.media_uploads.fields import CloudinaryUrlField, resolve_cloudinary_url
 from apps.media_uploads.validation import validate_media_items
 
-from .models import Challenge, ChallengeParticipant, CommunityPost, Poll, PollOption
+from .models import Challenge, ChallengeParticipant, CommunityPost, Poll, PollOption, PollVote
 
 
 class CommunityPostSerializer(serializers.ModelSerializer):
@@ -140,10 +140,41 @@ class PollOptionSerializer(serializers.ModelSerializer):
 
 class PollSerializer(serializers.ModelSerializer):
     options = PollOptionSerializer(many=True, read_only=True)
+    has_voted = serializers.SerializerMethodField()
+    selected_option_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Poll
-        fields = ["id", "question", "vote_count", "options", "expires_at", "is_active", "created_at"]
+        fields = [
+            "id",
+            "question",
+            "vote_count",
+            "options",
+            "expires_at",
+            "is_active",
+            "created_at",
+            "has_voted",
+            "selected_option_id",
+        ]
+
+    # Cached on context so has_voted/selected_option_id share one query per poll instead of
+    # running it twice — same pattern as WebTV/Emissions' engagement-count caching.
+    def _user_vote(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return None
+        cache = self.context.setdefault("_poll_vote_cache", {})
+        if obj.pk not in cache:
+            cache[obj.pk] = PollVote.objects.filter(poll=obj, user=user).only("option_id").first()
+        return cache[obj.pk]
+
+    def get_has_voted(self, obj):
+        return self._user_vote(obj) is not None
+
+    def get_selected_option_id(self, obj):
+        vote = self._user_vote(obj)
+        return vote.option_id if vote else None
 
 
 class ChallengeWriteSerializer(serializers.ModelSerializer):

@@ -23,13 +23,38 @@ from .serializers import HomeBannerSerializer, HomeBannerWriteSerializer
                 "banner": {
                     "image_url": None,
                     "title": "Bienvenue sur Art du Kivu",
+                    "title_highlight": "Art du Kivu",
                     "subtitle": "",
                     "cta_label": "",
                     "cta_url": "",
                 },
+                "stats": {"total_artists": 142, "live_count": 1},
                 "a_la_une": {"artist_of_month": None, "featured_podcast": None, "featured_event": None},
+                "contenus_a_la_une": [
+                    {
+                        "type": "artist",
+                        "id": 49,
+                        "slug": "agathe-le-arnaud",
+                        "title": "Agathe Le Arnaud",
+                        "description": "...",
+                        "image_url": "https://res.cloudinary.com/artdukivu/image/upload/v1/artists/photos/49.jpg",
+                    }
+                ],
                 "hits_du_mois": [],
+                "hits_du_mois_period": "Juillet 2026",
+                "sondage_actif": {
+                    "id": 4,
+                    "question": "Quel format préférez-vous pour découvrir de nouveaux artistes?",
+                    "vote_count": 886,
+                    "options": [{"id": 13, "text": "Vidéo", "vote_count": 342, "percentage": 39}],
+                    "expires_at": None,
+                    "is_active": True,
+                    "created_at": "2026-06-13T17:28:01.842703+02:00",
+                    "has_voted": False,
+                    "selected_option_id": None,
+                },
                 "magazine": {"hero": None, "articles": []},
+                "blogs": [],
             },
             response_only=True,
         )
@@ -39,7 +64,12 @@ from .serializers import HomeBannerSerializer, HomeBannerWriteSerializer
 @permission_classes([AllowAny])
 @cache_page(60 * 15)
 def home_view(request):
-    """Aggregated homepage payload — cached 15 minutes."""
+    """Aggregated homepage payload — cached 15 minutes.
+
+    `sondage_actif.has_voted`/`selected_option_id` are always `false`/`null` here (this response
+    is shared across every visitor for the cache's full 15-minute TTL — a per-user value would
+    leak). Use `GET /community/polls/{id}/` (not cached) for the real per-user vote status.
+    """
     return Response(services.get_home_payload())
 
 

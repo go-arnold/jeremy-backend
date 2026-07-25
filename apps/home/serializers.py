@@ -10,7 +10,7 @@ class HomeBannerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = HomeBanner
-        fields = ["image_url", "title", "subtitle", "cta_label", "cta_url"]
+        fields = ["image_url", "title", "title_highlight", "subtitle", "cta_label", "cta_url"]
 
     def get_image_url(self, obj):
         return resolve_cloudinary_url(obj.image, "image")
@@ -21,4 +21,4 @@ class HomeBannerWriteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = HomeBanner
-        fields = ["image", "title", "subtitle", "cta_label", "cta_url"]
+        fields = ["image", "title", "title_highlight", "subtitle", "cta_label", "cta_url"]
