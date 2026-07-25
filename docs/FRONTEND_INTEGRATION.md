@@ -610,6 +610,12 @@ l'utilisateur authentifié courant (toujours `false` pour un appel anonyme) — 
 pour masquer le bouton "Participer" et afficher "Vous avez déjà participé" à la place, plutôt que
 de se fier à l'erreur `already_joined` pour piloter l'UI.
 
+De même, `GET /community/polls/` et `/community/polls/{id}/` exposent désormais `has_voted:
+boolean` et `selected_option_id: number | null` pour l'utilisateur authentifié courant (toujours
+`false`/`null` pour un appel anonyme, ou sur le sondage embarqué dans `GET /home/` — voir section
+"Page d'accueil") — masquer l'interface de vote et afficher l'option choisie/les résultats à la
+place quand `has_voted === true`, plutôt que de découvrir un second vote refusé après coup.
+
 Les participations d'un défi s'affichent comme des posts normaux (mêmes likes/commentaires/
 partage/signets que les talents) via le filtre déjà existant sur la liste des posts :
 
@@ -1041,22 +1047,47 @@ Réponse agrégée, mise en cache 15 minutes côté serveur :
 
 ```json
 {
-  "banner": { "image_url": "...", "title": "...", "subtitle": "...", "cta_label": "...", "cta_url": "..." },
+  "banner": {
+    "image_url": "...", "title": "...", "title_highlight": "...",
+    "subtitle": "...", "cta_label": "...", "cta_url": "..."
+  },
+  "stats": { "total_artists": 142, "live_count": 1 },
   "a_la_une": {
     "artist_of_month": { "...": "ArtistListSerializer" },
     "featured_podcast": { "...": "EpisodeListSerializer" },
     "featured_event": { "...": "EventListSerializer" }
   },
+  "contenus_a_la_une": [
+    { "type": "artist", "id": 49, "slug": "...", "title": "...", "description": "...", "image_url": "..." },
+    { "type": "emission", "id": 3, "slug": "...", "title": "...", "description": "...", "image_url": "..." }
+  ],
   "hits_du_mois": [ "...MusicRelease (ReleaseListSerializer), classées par engagement du mois..." ],
+  "hits_du_mois_period": "Juillet 2026",
+  "sondage_actif": { "...": "PollSerializer, le sondage actif le plus récent, ou null" },
   "magazine": {
     "hero": { "...": "ArticleListSerializer, magazine mis en avant" },
     "articles": [ "...six articles magazine récents..." ]
-  }
+  },
+  "blogs": [ "...ArticleListSerializer, quelques articles de blog récents (article_type=blog)..." ]
 }
 ```
 
-Chaque sous-section peut être `null` (aucun artiste/podcast/événement à la une configuré) — le
-frontend doit gérer l'absence de contenu (masquer la section plutôt que planter).
+Chaque sous-section peut être `null`/vide (aucun contenu configuré) — le frontend doit gérer
+l'absence de contenu (masquer la section plutôt que planter).
+
+**`stats.live_count`** : nombre total de directs en cours **maintenant**, tous types confondus
+(Web TV + Émissions + Radio + Live Music).
+
+**`contenus_a_la_une`** : liste hétérogène **choisie et ordonnée manuellement par un admin**
+(nouveau modèle `FeaturedContent`, pas de sélection automatique) — `type` ∈ `artist | emission |
+radio | webtv | live_music | event | release | article | podcast`. Distinct de `a_la_une`
+ci-dessus (qui reste inchangé, sélection automatique via `is_featured` sur chaque app).
+
+**`sondage_actif.has_voted` / `selected_option_id`** : toujours `false`/`null` ici — cette réponse
+est partagée par **tous** les visiteurs pendant les 15 minutes du cache serveur, une valeur
+propre à un utilisateur ne peut donc pas y figurer sans fuite vers les autres visiteurs. Pour le
+vrai statut de vote de l'utilisateur courant, appeler `GET /community/polls/{id}/` (non caché,
+voir section Communauté) avec le `id` de `sondage_actif`.
 
 ### Bannière d'accueil configurable (admin)
 
