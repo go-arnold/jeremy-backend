@@ -4,3 +4,4 @@ CLAUDE.md
 __pycache__/
 *.pyc
 .env.txt
+.seed_watermark.json
